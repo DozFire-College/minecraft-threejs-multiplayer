@@ -1,3 +1,6 @@
+# CHECK MULTIPLAYER BRANCH
+If you want check multiplayer - change multiplayer branch and download
+
 # minecraft-threejs
 
 English ｜ [中文](https://github.com/vyse12138/minecraft-threejs/blob/main/README_ZH.md)
