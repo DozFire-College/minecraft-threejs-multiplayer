@@ -44,3 +44,14 @@ Recommend to use Chrome to get the best experience
   - 4.1 Update world generation. The world should be one for everyone -> ❌
   - 4.2 Update client. The client must request peace from the server and leave all block handling on the server. -> ❌
   - 4.3 Update Terrain. Make the server push out block changes. -> ❌
+5. Add player models. -> ❌
+
+## Extras inssues
+
+1. Add water. -> ❌
+2. Add more blocks. -> ❌
+3. Add survival mod:
+   3.1 In player state add HP player. -> ❌
+   3.2 Add inventory. -> ❌
+   3.3 Add mobs. -> ❌
+4. Add create worlds -> ❌
