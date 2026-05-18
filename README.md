@@ -1,3 +1,9 @@
+# For run in LocalHost
+- bash: cd minecraft-server && npm start
+- bash: cd minecraft-threejs-multiplayer && npm run dev -- --host 0.0.0.0
+- In main.ts write your ip: const SERVER_URL = 'ws://YOUR_IP:3000'
+
+
 # minecraft-threejs
 
 English ｜ [中文](https://github.com/vyse12138/minecraft-threejs/blob/main/README_ZH.md)
