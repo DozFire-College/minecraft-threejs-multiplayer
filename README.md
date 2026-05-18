@@ -37,10 +37,10 @@ Recommend to use Chrome to get the best experience
 1. Creating a WebSocket Networking Library -> ✅
 2. Install and import the library Node.js. Create backend-server -> ✅
 3. Processing client and server data:
-  3.1 Add new dir for run server and install npm module -> ✅
-  3.2 Create new dir and file in client: ./network/NetworkManager.ts -> ✅
-  3.3 Update main.ts: Add const SERVER_URL -> ✅
+-  3.1 Add new dir for run server and install npm module -> ✅
+-  3.2 Create new dir and file in client: ./network/NetworkManager.ts -> ✅
+-  3.3 Update main.ts: Add const SERVER_URL -> ✅
 4. Update client and server:
-   4.1 Update world generation. The world should be one for everyone -> ❌
-   4.2 Update client. The client must request peace from the server and leave all block handling on the server. -> ❌
-   4.3 Update Terrain. Make the server push out block changes. -> ❌
+  - 4.1 Update world generation. The world should be one for everyone -> ❌
+  - 4.2 Update client. The client must request peace from the server and leave all block handling on the server. -> ❌
+  - 4.3 Update Terrain. Make the server push out block changes. -> ❌
