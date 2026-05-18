@@ -1,7 +1,8 @@
-export default {
-  build: {
-    chunkSizeWarningLimit: 2000,
-    assetsInlineLimit: 0,
-    sourcemap: true
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  server: {
+    port: 5173,
+    strictPort: true  // чтобы точно использовал 5173
   }
-}
+})
