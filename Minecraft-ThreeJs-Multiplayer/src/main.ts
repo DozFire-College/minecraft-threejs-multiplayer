@@ -9,19 +9,19 @@ import { NetworkManager } from './network/NetworkManager'
 
 import './style.css'
 
-// ========== НАСТРОЙКА СЕРВЕРА ==========
-// Поменяй на свой IP для игры по сети
-// Например: 'ws://192.168.1.5:3000'
-const SERVER_URL = 'ws://localhost:3000'
+// ========== SETTING SERVER ==========
+// change your IP in cmd 'ipconfig'
+// For example: 'ws://192.168.1.5:3000'
+const SERVER_URL = 'ws://192.168.1.3:3000'
 
-// ========== СЕТЬ ==========
+
 const networkManager = new NetworkManager(SERVER_URL)
 
 networkManager.connect()
   .then(() => console.log('🌐 Сетевая игра активна'))
   .catch((error) => console.warn('⚠️ Сервер недоступен, играем офлайн:', error.message))
 
-// ========== ОСНОВНЫЕ СИСТЕМЫ ==========
+
 const core = new Core()
 const camera = core.camera
 const scene = core.scene
@@ -35,7 +35,7 @@ const control = new Control(scene, camera, player, terrain, audio)
 
 const ui = new UI(terrain, control)
 
-// ========== ДРУГИЕ ИГРОКИ ==========
+
 const otherPlayerMeshes = new Map<string, THREE.Mesh>()
 
 function createPlayerMesh(): THREE.Mesh {
@@ -81,7 +81,7 @@ networkManager.on('playerLeft', (data: any) => {
     console.log(`➖ Игрок ${data.id} покинул сервер`)
 })
 
-// ========== ИГРОВОЙ ЦИКЛ ==========
+
 let lastSendTime = 0
 const SEND_INTERVAL = 50
 
