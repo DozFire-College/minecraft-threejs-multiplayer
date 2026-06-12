@@ -5,6 +5,9 @@ import { BlockType } from '../index'
  */
 export default class Block {
   object: any
+  instanceIndex = -1
+  listIndex = -1
+  chunkKey = ''
   constructor(
     x: number,
     y: number,

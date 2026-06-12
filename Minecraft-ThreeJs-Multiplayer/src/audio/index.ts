@@ -34,32 +34,44 @@ import leaf4 from './blocks/leaf4.ogg'
 import { isMobile } from '../utils'
 
 export default class Audio {
-  constructor(camera: THREE.PerspectiveCamera) {
-    if (isMobile) return
+  private listener: THREE.AudioListener | null = null
+  private bgm: THREE.Audio | null = null
+  private audioLoader!: THREE.AudioLoader // Используем ! для указания, что будет инициализировано
 
-    const listener = new THREE.AudioListener()
-    const audioLoader = new THREE.AudioLoader()
-    camera.add(listener)
+  constructor(camera: THREE.PerspectiveCamera) {
+    // Если мобильное устройство - не инициализируем аудио
+    if (isMobile) {
+      this.disabled = true
+      return
+    }
+
+    this.audioLoader = new THREE.AudioLoader()
+    this.listener = new THREE.AudioListener()
+    camera.add(this.listener)
 
     // load bgm
-    const bgm = new THREE.Audio(listener)
-    bgm.autoplay = false
-    audioLoader.load(hal3, buffer => {
-      bgm.setBuffer(buffer)
-      bgm.setVolume(0.1)
-      bgm.setLoop(true)
-      if (bgm.isPlaying) {
-        bgm.pause()
-        bgm.play()
+    this.bgm = new THREE.Audio(this.listener)
+    this.bgm.autoplay = false
+    this.audioLoader.load(hal3, buffer => {
+      if (this.bgm) {
+        this.bgm!.setBuffer(buffer)
+        this.bgm!.setVolume(0.1)
+        this.bgm!.setLoop(true)
+        if (this.bgm!.isPlaying) {
+          this.bgm!.pause()
+          this.bgm!.play()
+        }
       }
+    }, undefined, (error) => {
+      console.error('Ошибка загрузки BGM:', error)
     })
 
     // play / pause bgm
     document.addEventListener('pointerlockchange', () => {
-      if (document.pointerLockElement && !bgm.isPlaying && !this.disabled) {
-        bgm.play()
-      } else {
-        bgm.pause()
+      if (document.pointerLockElement && this.bgm && !this.bgm.isPlaying && !this.disabled) {
+        this.bgm.play()
+      } else if (this.bgm) {
+        this.bgm.pause()
       }
     })
 
@@ -67,11 +79,15 @@ export default class Audio {
     for (const types of this.sourceSet) {
       const audios: THREE.Audio[] = []
       for (const type of types) {
-        audioLoader.load(type, buffer => {
-          const audio = new THREE.Audio(listener!)
-          audio.setBuffer(buffer)
-          audio.setVolume(0.15)
-          audios.push(audio)
+        this.audioLoader.load(type, buffer => {
+          if (this.listener) {
+            const audio = new THREE.Audio(this.listener!)
+            audio.setBuffer(buffer)
+            audio.setVolume(0.15)
+            audios.push(audio)
+          }
+        }, undefined, (error) => {
+          console.error('Ошибка загрузки звука:', error)
         })
       }
       this.soundSet.push(audios)
@@ -99,9 +115,37 @@ export default class Audio {
   index = 0
 
   playSound(type: BlockType) {
-    if (!this.disabled && !isMobile) {
+    if (!this.disabled && !isMobile && this.soundSet[type]) {
       this.index++ === 3 && (this.index = 0)
       this.soundSet[type]?.[this.index]?.play()
     }
+  }
+
+  // Метод для очистки ресурсов
+  dispose() {
+    console.log('🔇 Очистка аудио ресурсов...')
+    
+    // Останавливаем и очищаем фоновую музыку
+    if (this.bgm) {
+      if (this.bgm.isPlaying) {
+        this.bgm.stop()
+      }
+      this.bgm = null
+    }
+    
+    // Очищаем звуковые эффекты
+    for (const audios of this.soundSet) {
+      for (const audio of audios) {
+        if (audio.isPlaying) {
+          audio.stop()
+        }
+      }
+    }
+    this.soundSet = []
+    
+    // Очищаем слушатель
+    this.listener = null
+    
+    console.log('✅ Аудио ресурсы очищены')
   }
 }

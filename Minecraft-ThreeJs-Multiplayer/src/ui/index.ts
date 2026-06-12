@@ -1,12 +1,11 @@
+// ui/index.ts
 import FPS from './fps'
 import Bag from './bag'
 import Terrain from '../terrain'
-import Block from '../terrain/mesh/block'
 import Control from '../control'
 import { Mode } from '../player'
 import Joystick from './joystick'
 import { isMobile } from '../utils'
-import * as THREE from 'three'
 
 export default class UI {
   constructor(terrain: Terrain, control: Control) {
@@ -18,72 +17,47 @@ export default class UI {
     this.crossHair.innerHTML = '+'
     document.body.appendChild(this.crossHair)
 
+    if (this.distanceInput instanceof HTMLInputElement) {
+      this.distanceInput.value = String(terrain.distance)
+    }
+    if (this.distance) {
+      this.distance.innerHTML = `Render Distance: ${terrain.distance}`
+    }
+
     // play
     this.play?.addEventListener('click', () => {
       if (this.play?.innerHTML === 'Play') {
         this.onPlay()
 
-        // reset game
-        terrain.noise.seed = Math.random()
-        terrain.noise.stoneSeed = Math.random()
-        terrain.noise.treeSeed = Math.random()
-        terrain.noise.coalSeed = Math.random()
-        terrain.noise.leafSeed = Math.random()
-        terrain.customBlocks = []
+        // В серверном режиме не пересоздаём мир локально
+        // Просто запрашиваем чанки заново
+        terrain.resetBlocks()
         terrain.initBlocks()
-        terrain.generate()
+        terrain.generate() // Запросит чанки с сервера
         terrain.camera.position.y = 40
         control.player.setMode(Mode.walking)
       }
       !isMobile && control.control.lock()
     })
 
-    // save load
+    // save load - в серверном режиме save/load не имеют смысла
+    // так как мир хранится на сервере
     this.save?.addEventListener('click', () => {
       if (this.save?.innerHTML === 'Save and Exit') {
-        // save game
-        window.localStorage.setItem(
-          'block',
-          JSON.stringify(terrain.customBlocks)
-        )
-        window.localStorage.setItem('seed', JSON.stringify(terrain.noise.seed))
-
-        window.localStorage.setItem(
-          'position',
-          JSON.stringify({
-            x: terrain.camera.position.x,
-            y: terrain.camera.position.y,
-            z: terrain.camera.position.z
-          })
-        )
-
+        // В серверном режиме save не нужен, просто показываем сообщение
+        this.showMessage("World is saved on server automatically")
+        
         // ui update
         this.onExit()
         this.onSave()
       } else {
-        // load game
-        terrain.noise.seed =
-          Number(window.localStorage.getItem('seed')) ?? Math.random()
-
-        const customBlocks =
-          (JSON.parse(
-            window.localStorage.getItem('block') || 'null'
-          ) as Block[]) ?? []
-
-        terrain.customBlocks = customBlocks
+        // Load game - в серверном режиме не нужно, мир всегда загружается с сервера
+        this.showMessage("World loads from server automatically")
+        
+        // Просто перезапрашиваем чанки
+        terrain.resetBlocks()
         terrain.initBlocks()
         terrain.generate()
-
-        const position =
-          (JSON.parse(window.localStorage.getItem('position') || 'null') as {
-            x: number
-            y: number
-            z: number
-          }) ?? null
-
-        position && (terrain.camera.position.x = position.x)
-        position && (terrain.camera.position.y = position.y)
-        position && (terrain.camera.position.z = position.z)
 
         // ui update
         this.onPlay()
@@ -136,18 +110,15 @@ export default class UI {
     // apply settings
     this.settingBack?.addEventListener('click', () => {
       if (this.distanceInput instanceof HTMLInputElement) {
-        terrain.distance = parseInt(this.distanceInput.value)
+        const newDistance = parseInt(this.distanceInput.value)
+        terrain.distance = newDistance
         terrain.maxCount =
-          (terrain.distance * terrain.chunkSize * 2 + terrain.chunkSize) ** 2 +
-          500
+          (terrain.distance * terrain.chunkSize * 2 + terrain.chunkSize) ** 2 + 500
 
+        terrain.resetBlocks()
         terrain.initBlocks()
-        terrain.generate()
-        terrain.scene.fog = new THREE.Fog(
-          0x87ceeb,
-          1,
-          terrain.distance * 24 + 24
-        )
+        terrain.generate() // Перезапросим чанки с новой дистанцией
+        terrain.updateFog()
       }
     })
 
@@ -228,6 +199,28 @@ export default class UI {
   musicInput = document.querySelector('#music-input')
 
   settingBack = document.querySelector('#setting-back')
+
+  // Добавляем метод для показа сообщений
+  private showMessage = (message: string) => {
+    const messageDiv = document.createElement('div')
+    messageDiv.className = 'toast-message'
+    messageDiv.textContent = message
+    messageDiv.style.position = 'fixed'
+    messageDiv.style.bottom = '20px'
+    messageDiv.style.left = '50%'
+    messageDiv.style.transform = 'translateX(-50%)'
+    messageDiv.style.backgroundColor = 'rgba(0,0,0,0.8)'
+    messageDiv.style.color = 'white'
+    messageDiv.style.padding = '10px 20px'
+    messageDiv.style.borderRadius = '5px'
+    messageDiv.style.zIndex = '2000'
+    messageDiv.style.fontFamily = 'monospace'
+    document.body.appendChild(messageDiv)
+    
+    setTimeout(() => {
+      messageDiv.remove()
+    }, 2000)
+  }
 
   onPlay = () => {
     isMobile && this.joystick.init()

@@ -11,6 +11,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@types/three": "^0.184.1",
+    "three": "^0.184.0",
     "ws": "^8.20.1"
   },
   "devDependencies": {

@@ -1,20 +1,11 @@
+// control/index.ts
 import * as THREE from 'three'
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls'
 import Player, { Mode } from '../player'
 import Terrain, { BlockType } from '../terrain'
 
-import Block from '../terrain/mesh/block'
-import Noise from '../terrain/noise'
 import Audio from '../audio'
 import { isMobile } from '../utils'
-enum Side {
-  front,
-  back,
-  left,
-  right,
-  down,
-  up
-}
 
 export default class Control {
   constructor(
@@ -99,6 +90,7 @@ export default class Control {
   jumpInterval?: ReturnType<typeof setInterval>
   mouseHolding = false
   spaceHolding = false
+  collisionEpsilon = 0.001
 
   initRayCaster = () => {
     this.raycasterUp.ray.direction = new THREE.Vector3(0, 1, 0)
@@ -122,6 +114,7 @@ export default class Control {
     w: false,
     s: false
   }
+  
   setMovementHandler = (e: KeyboardEvent) => {
     if (e.repeat) {
       return
@@ -163,7 +156,6 @@ export default class Control {
           return
         }
         if (this.player.mode === Mode.walking) {
-          // jump
           if (!this.isJumping) {
             this.velocity.y = 8
             this.isJumping = true
@@ -278,7 +270,6 @@ export default class Control {
 
   mousedownHandler = (e: MouseEvent) => {
     e.preventDefault()
-    // let p1 = performance.now()
     this.raycaster.setFromCamera({ x: 0, y: 0 }, this.camera)
     const block = this.raycaster.intersectObjects(this.terrain.blocks)[0]
     const matrix = new THREE.Matrix4()
@@ -288,7 +279,6 @@ export default class Control {
       case 0:
         {
           if (block && block.object instanceof THREE.InstancedMesh) {
-            // calculate position
             block.object.getMatrixAt(block.instanceId!, matrix)
             const position = new THREE.Vector3().setFromMatrixPosition(matrix)
 
@@ -297,34 +287,20 @@ export default class Control {
               (BlockType[block.object.name as any] as unknown as BlockType) ===
               BlockType.bedrock
             ) {
+              // Отправляем запрос на генерацию соседних блоков на сервер
               this.terrain.generateAdjacentBlocks(position)
               return
             }
 
-            // remove the block
-            block.object.setMatrixAt(
-              block.instanceId!,
-              new THREE.Matrix4().set(
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0
-              )
-            )
+            // Отправляем запрос на удаление блока на сервер
+            this.terrain.networkManager?.send('blockBreak', {
+              x: position.x,
+              y: position.y,
+              z: position.z
+            })
+            this.terrain.removeBlockAtPosition(position)
 
-            // block and sound effect
+            // Визуальный эффект и звук (локально для отзывчивости)
             this.audio.playSound(
               BlockType[block.object.name as any] as unknown as BlockType
             )
@@ -351,38 +327,6 @@ export default class Control {
               mesh.geometry.scale(0.85, 0.85, 0.85)
             }
             animate()
-
-            // update
-            block.object.instanceMatrix.needsUpdate = true
-
-            // check existence
-            let existed = false
-            for (const customBlock of this.terrain.customBlocks) {
-              if (
-                customBlock.x === position.x &&
-                customBlock.y === position.y &&
-                customBlock.z === position.z
-              ) {
-                existed = true
-                customBlock.placed = false
-              }
-            }
-
-            // add to custom blocks when it's not existed
-            if (!existed) {
-              this.terrain.customBlocks.push(
-                new Block(
-                  position.x,
-                  position.y,
-                  position.z,
-                  BlockType[block.object.name as any] as unknown as BlockType,
-                  false
-                )
-              )
-            }
-
-            // generate adjacent blocks
-            this.terrain.generateAdjacentBlocks(position)
           }
         }
         break
@@ -391,51 +335,24 @@ export default class Control {
       case 2:
         {
           if (block && block.object instanceof THREE.InstancedMesh) {
-            // calculate normal and position
             const normal = block.face!.normal
             block.object.getMatrixAt(block.instanceId!, matrix)
             const position = new THREE.Vector3().setFromMatrixPosition(matrix)
 
+            const newX = normal.x + position.x
+            const newY = normal.y + position.y
+            const newZ = normal.z + position.z
+
             // return when block overlaps with player
-            if (
-              position.x + normal.x === Math.round(this.camera.position.x) &&
-              position.z + normal.z === Math.round(this.camera.position.z) &&
-              (position.y + normal.y === Math.round(this.camera.position.y) ||
-                position.y + normal.y ===
-                  Math.round(this.camera.position.y - 1))
-            ) {
+            if (!this.canPlaceBlockAt(newX, newY, newZ)) {
               return
             }
 
-            // put the block
-            matrix.setPosition(
-              normal.x + position.x,
-              normal.y + position.y,
-              normal.z + position.z
-            )
-            this.terrain.blocks[this.holdingBlock].setMatrixAt(
-              this.terrain.getCount(this.holdingBlock),
-              matrix
-            )
-            this.terrain.setCount(this.holdingBlock)
+            // Отправляем запрос на установку блока на сервер
+            this.terrain.buildBlock(new THREE.Vector3(newX, newY, newZ), this.holdingBlock)
 
-            //sound effect
+            // Звук (локально)
             this.audio.playSound(this.holdingBlock)
-
-            // update
-            this.terrain.blocks[this.holdingBlock].instanceMatrix.needsUpdate =
-              true
-
-            // add to custom blocks
-            this.terrain.customBlocks.push(
-              new Block(
-                normal.x + position.x,
-                normal.y + position.y,
-                normal.z + position.z,
-                this.holdingBlock,
-                true
-              )
-            )
           }
         }
         break
@@ -449,9 +366,8 @@ export default class Control {
         this.mousedownHandler(e)
       }, 333)
     }
-
-    // console.log(performance.now() - p1)
   }
+  
   mouseupHandler = () => {
     this.clickInterval && clearInterval(this.clickInterval)
     this.mouseHolding = false
@@ -462,7 +378,6 @@ export default class Control {
       return
     }
     this.holdingIndex = parseInt(e.key) - 1
-
     this.holdingBlock = this.holdingBlocks[this.holdingIndex] ?? BlockType.grass
   }
 
@@ -479,29 +394,21 @@ export default class Control {
         this.holdingIndex--
         this.holdingIndex < 0 && (this.holdingIndex = 9)
       }
-      this.holdingBlock =
-        this.holdingBlocks[this.holdingIndex] ?? BlockType.grass
+      this.holdingBlock = this.holdingBlocks[this.holdingIndex] ?? BlockType.grass
     }
   }
 
   initEventListeners = () => {
-    // add / remove handler when pointer lock / unlock
     document.addEventListener('pointerlockchange', () => {
       if (document.pointerLockElement) {
-        document.body.addEventListener(
-          'keydown',
-          this.changeHoldingBlockHandler
-        )
+        document.body.addEventListener('keydown', this.changeHoldingBlockHandler)
         document.body.addEventListener('wheel', this.wheelHandler)
         document.body.addEventListener('keydown', this.setMovementHandler)
         document.body.addEventListener('keyup', this.resetMovementHandler)
         document.body.addEventListener('mousedown', this.mousedownHandler)
         document.body.addEventListener('mouseup', this.mouseupHandler)
       } else {
-        document.body.removeEventListener(
-          'keydown',
-          this.changeHoldingBlockHandler
-        )
+        document.body.removeEventListener('keydown', this.changeHoldingBlockHandler)
         document.body.removeEventListener('wheel', this.wheelHandler)
         document.body.removeEventListener('keydown', this.setMovementHandler)
         document.body.removeEventListener('keyup', this.resetMovementHandler)
@@ -512,658 +419,313 @@ export default class Control {
     })
   }
 
-  // move along X with direction factor
   moveX(distance: number, delta: number) {
-    this.camera.position.x +=
-      distance * (this.player.speed / Math.PI) * 2 * delta
+    this.camera.position.x += distance * (this.player.speed / Math.PI) * 2 * delta
   }
 
-  // move along Z with direction factor
   moveZ = (distance: number, delta: number) => {
-    this.camera.position.z +=
-      distance * (this.player.speed / Math.PI) * 2 * delta
+    this.camera.position.z += distance * (this.player.speed / Math.PI) * 2 * delta
   }
 
-  // collide checking
-  collideCheckAll = (
-    position: THREE.Vector3,
-    noise: Noise,
-    customBlocks: Block[],
-    far: number
-  ) => {
-    this.collideCheck(Side.down, position, noise, customBlocks, far)
-    this.collideCheck(Side.front, position, noise, customBlocks)
-    this.collideCheck(Side.back, position, noise, customBlocks)
-    this.collideCheck(Side.left, position, noise, customBlocks)
-    this.collideCheck(Side.right, position, noise, customBlocks)
-    this.collideCheck(Side.up, position, noise, customBlocks)
-  }
+  private getHeadOffset = () =>
+    this.player.body.height - this.player.body.eyeHeight
 
-  collideCheck = (
-    side: Side,
-    position: THREE.Vector3,
-    noise: Noise,
-    customBlocks: Block[],
-    far: number = this.player.body.width
-  ) => {
-    const matrix = new THREE.Matrix4()
+  private getPlayerBounds = (position: THREE.Vector3) => ({
+    minX: position.x - this.player.body.width,
+    maxX: position.x + this.player.body.width,
+    minY: position.y - this.player.body.eyeHeight,
+    maxY: position.y + this.getHeadOffset(),
+    minZ: position.z - this.player.body.width,
+    maxZ: position.z + this.player.body.width
+  })
 
-    //reset simulation blocks
-    let index = 0
-    this.tempMesh.instanceMatrix = new THREE.InstancedBufferAttribute(
-      new Float32Array(100 * 16),
-      16
+  private getBlockBounds = (block: { x: number; y: number; z: number }) => ({
+    minX: block.x - 0.5,
+    maxX: block.x + 0.5,
+    minY: block.y - 0.5,
+    maxY: block.y + 0.5,
+    minZ: block.z - 0.5,
+    maxZ: block.z + 0.5
+  })
+
+  private intersectsBlock = (
+    position: THREE.Vector3,
+    block: { x: number; y: number; z: number }
+  ) => {
+    const bounds = this.getPlayerBounds(position)
+    const blockBounds = this.getBlockBounds(block)
+
+    return (
+      bounds.maxX > blockBounds.minX &&
+      bounds.minX < blockBounds.maxX &&
+      bounds.maxY > blockBounds.minY &&
+      bounds.minY < blockBounds.maxY &&
+      bounds.maxZ > blockBounds.minZ &&
+      bounds.minZ < blockBounds.maxZ
     )
+  }
 
-    // block to remove
-    let removed = false
-    let treeRemoved = new Array<boolean>(
-      this.terrain.noise.treeHeight + 1
-    ).fill(false)
+  private canPlaceBlockAt = (x: number, y: number, z: number) => {
+    const playerBounds = this.getPlayerBounds(this.camera.position)
+    const blockBounds = this.getBlockBounds({ x, y, z })
 
-    // get block position
-    let x = Math.round(position.x)
-    let z = Math.round(position.z)
+    return !(
+      playerBounds.maxX > blockBounds.minX &&
+      playerBounds.minX < blockBounds.maxX &&
+      playerBounds.maxY > blockBounds.minY &&
+      playerBounds.minY < blockBounds.maxY &&
+      playerBounds.maxZ > blockBounds.minZ &&
+      playerBounds.minZ < blockBounds.maxZ
+    )
+  }
 
-    switch (side) {
-      case Side.front:
-        x++
-        this.raycasterFront.ray.origin = position
-        break
-      case Side.back:
-        x--
-        this.raycasterBack.ray.origin = position
-        break
-      case Side.left:
-        z--
-        this.raycasterLeft.ray.origin = position
-        break
-      case Side.right:
-        z++
-        this.raycasterRight.ray.origin = position
-        break
-      case Side.down:
-        this.raycasterDown.ray.origin = position
-        this.raycasterDown.far = far
-        break
-      case Side.up:
-        this.raycasterUp.ray.origin = new THREE.Vector3().copy(position)
-        this.raycasterUp.ray.origin.y--
-        break
+  private getMovementVector = (forward: number, strafe: number, delta: number) => {
+    const forwardDirection = new THREE.Vector3()
+    this.camera.getWorldDirection(forwardDirection)
+    forwardDirection.y = 0
+
+    if (forwardDirection.lengthSq() === 0) {
+      forwardDirection.set(0, 0, -1)
+    } else {
+      forwardDirection.normalize()
     }
 
-    let y =
-      Math.floor(
-        noise.get(x / noise.gap, z / noise.gap, noise.seed) * noise.amp
-      ) + 30
+    const rightDirection = new THREE.Vector3()
+      .crossVectors(forwardDirection, this.camera.up)
+      .normalize()
 
-    // check custom blocks
-    for (const block of customBlocks) {
-      if (block.x === x && block.z === z) {
-        if (block.placed) {
-          // placed blocks
-          matrix.setPosition(block.x, block.y, block.z)
-          this.tempMesh.setMatrixAt(index++, matrix)
-        } else if (block.y === y) {
-          // removed blocks
-          removed = true
+    return forwardDirection.multiplyScalar(forward * delta).add(
+      rightDirection.multiplyScalar(strafe * delta)
+    )
+  }
+
+  private resolvePlayerPenetration = () => {
+    const position = this.camera.position
+    const overlappingBlocks = this.terrain
+      .getNearbyBlocks(position, 2, 4)
+      .filter(block => block.placed && this.intersectsBlock(position, block))
+
+    for (const block of overlappingBlocks) {
+      const bounds = this.getPlayerBounds(position)
+      const blockBounds = this.getBlockBounds(block)
+      const pushLeft = bounds.maxX - blockBounds.minX
+      const pushRight = blockBounds.maxX - bounds.minX
+      const pushBack = bounds.maxZ - blockBounds.minZ
+      const pushFront = blockBounds.maxZ - bounds.minZ
+      const pushUp = blockBounds.maxY - bounds.minY
+
+      const corrections = [
+        { axis: 'x', value: pushLeft, sign: -1 },
+        { axis: 'x', value: pushRight, sign: 1 },
+        { axis: 'z', value: pushBack, sign: -1 },
+        { axis: 'z', value: pushFront, sign: 1 },
+        { axis: 'y', value: pushUp, sign: 1 }
+      ].filter(correction => correction.value > 0)
+
+      corrections.sort((a, b) => a.value - b.value)
+      const correction = corrections[0]
+
+      if (!correction) {
+        continue
+      }
+
+      if (correction.axis === 'x') {
+        position.x += correction.value * correction.sign + this.collisionEpsilon * correction.sign
+        this.velocity.x = 0
+      } else if (correction.axis === 'z') {
+        position.z += correction.value * correction.sign + this.collisionEpsilon * correction.sign
+        this.velocity.z = 0
+      } else {
+        position.y += correction.value + this.collisionEpsilon
+        this.velocity.y = Math.max(0, this.velocity.y)
+        this.downCollide = true
+        this.isJumping = false
+      }
+    }
+  }
+
+  private resolveHorizontalMovement = (delta: number) => {
+    const movement = this.getMovementVector(this.velocity.x, this.velocity.z, delta)
+    const position = this.camera.position
+    const nearbyBlocks = this.terrain.getNearbyBlocks(position, 3, 4)
+
+    this.frontCollide = false
+    this.backCollide = false
+    this.leftCollide = false
+    this.rightCollide = false
+
+    if (movement.x !== 0) {
+      const nextPosition = position.clone()
+      nextPosition.x += movement.x
+
+      for (const block of nearbyBlocks) {
+        if (!block.placed || !this.intersectsBlock(nextPosition, block)) continue
+
+        if (movement.x > 0) {
+          nextPosition.x = Math.min(
+            nextPosition.x,
+            this.getBlockBounds(block).minX - this.player.body.width - this.collisionEpsilon
+          )
+          this.frontCollide = true
         } else {
-          for (let i = 1; i <= this.terrain.noise.treeHeight; i++) {
-            if (block.y === y + i) {
-              treeRemoved[i] = true
-            }
-          }
+          nextPosition.x = Math.max(
+            nextPosition.x,
+            this.getBlockBounds(block).maxX + this.player.body.width + this.collisionEpsilon
+          )
+          this.backCollide = true
         }
       }
+
+      position.x = nextPosition.x
     }
 
-    // update simulation blocks (ignore removed blocks)
-    if (!removed) {
-      matrix.setPosition(x, y, z)
-      this.tempMesh.setMatrixAt(index++, matrix)
-    }
-    for (let i = 1; i <= this.terrain.noise.treeHeight; i++) {
-      if (!treeRemoved[i]) {
-        let treeOffset =
-          noise.get(x / noise.treeGap, z / noise.treeGap, noise.treeSeed) *
-          noise.treeAmp
+    if (movement.z !== 0) {
+      const nextPosition = position.clone()
+      nextPosition.z += movement.z
 
-        let stoneOffset =
-          noise.get(x / noise.stoneGap, z / noise.stoneGap, noise.stoneSeed) *
-          noise.stoneAmp
+      for (const block of nearbyBlocks) {
+        if (!block.placed || !this.intersectsBlock(nextPosition, block)) continue
 
-        if (
-          treeOffset > noise.treeThreshold &&
-          y >= 27 &&
-          stoneOffset < noise.stoneThreshold
-        ) {
-          matrix.setPosition(x, y + i, z)
-          this.tempMesh.setMatrixAt(index++, matrix)
+        if (movement.z > 0) {
+          nextPosition.z = Math.min(
+            nextPosition.z,
+            this.getBlockBounds(block).minZ - this.player.body.width - this.collisionEpsilon
+          )
+          this.rightCollide = true
+        } else {
+          nextPosition.z = Math.max(
+            nextPosition.z,
+            this.getBlockBounds(block).maxZ + this.player.body.width + this.collisionEpsilon
+          )
+          this.leftCollide = true
         }
       }
+
+      position.z = nextPosition.z
+    }
+  }
+
+  private resolveVerticalMovement = (delta: number) => {
+    const position = this.camera.position
+    const nextPosition = position.clone()
+    nextPosition.y += this.velocity.y * delta
+
+    this.downCollide = false
+    this.upCollide = false
+
+    for (const block of this.terrain.getNearbyBlocks(position, 2, 4)) {
+      if (!block.placed || !this.intersectsBlock(nextPosition, block)) continue
+      const blockBounds = this.getBlockBounds(block)
+
+      if (this.velocity.y >= 0) {
+        nextPosition.y = Math.min(
+          nextPosition.y,
+          blockBounds.minY - this.getHeadOffset() - this.collisionEpsilon
+        )
+        this.upCollide = true
+      } else {
+        nextPosition.y = Math.max(
+          nextPosition.y,
+          blockBounds.maxY + this.player.body.eyeHeight + this.collisionEpsilon
+        )
+        this.downCollide = true
+      }
     }
 
-    // sneaking check
-    if (
-      this.player.mode === Mode.sneaking &&
-      y < Math.floor(this.camera.position.y - 2) &&
-      side !== Side.down &&
-      side !== Side.up
-    ) {
-      matrix.setPosition(x, Math.floor(this.camera.position.y - 1), z)
-      this.tempMesh.setMatrixAt(index++, matrix)
-    }
-    this.tempMesh.instanceMatrix.needsUpdate = true
+    position.y = nextPosition.y
+  }
 
-    // update collide
-    const origin = new THREE.Vector3(position.x, position.y - 1, position.z)
-    switch (side) {
-      case Side.front: {
-        const c1 = this.raycasterFront.intersectObject(this.tempMesh).length
-        this.raycasterFront.ray.origin = origin
-        const c2 = this.raycasterFront.intersectObject(this.tempMesh).length
-        c1 || c2 ? (this.frontCollide = true) : (this.frontCollide = false)
+  collideCheckAll = () => {
+    const position = this.camera.position
+    const bounds = this.getPlayerBounds(position)
+    const contactEpsilon = 0.05
+    
+    this.frontCollide = false
+    this.backCollide = false
+    this.leftCollide = false
+    this.rightCollide = false
+    this.downCollide = false
+    this.upCollide = false
+    
+    for (const block of this.terrain.getNearbyBlocks(position)) {
+      if (!block.placed) continue
 
-        break
+      const blockBounds = this.getBlockBounds(block)
+      const overlapY = bounds.maxY > blockBounds.minY && bounds.minY < blockBounds.maxY
+      const overlapZ = bounds.maxZ > blockBounds.minZ && bounds.minZ < blockBounds.maxZ
+      const realOverlapX = bounds.maxX > blockBounds.minX && bounds.minX < blockBounds.maxX
+
+      if (
+        realOverlapX &&
+        overlapZ &&
+        Math.abs(bounds.minY - blockBounds.maxY) <= contactEpsilon
+      ) {
+        this.downCollide = true
       }
-      case Side.back: {
-        const c1 = this.raycasterBack.intersectObject(this.tempMesh).length
-        this.raycasterBack.ray.origin = origin
-        const c2 = this.raycasterBack.intersectObject(this.tempMesh).length
-        c1 || c2 ? (this.backCollide = true) : (this.backCollide = false)
-        break
+
+      if (
+        realOverlapX &&
+        overlapZ &&
+        Math.abs(bounds.maxY - blockBounds.minY) <= contactEpsilon
+      ) {
+        this.upCollide = true
       }
-      case Side.left: {
-        const c1 = this.raycasterLeft.intersectObject(this.tempMesh).length
-        this.raycasterLeft.ray.origin = origin
-        const c2 = this.raycasterLeft.intersectObject(this.tempMesh).length
-        c1 || c2 ? (this.leftCollide = true) : (this.leftCollide = false)
-        break
+
+      if (overlapY && overlapZ) {
+        if (Math.abs(bounds.maxX - blockBounds.minX) <= contactEpsilon) {
+          this.frontCollide = true
+        }
+        if (Math.abs(bounds.minX - blockBounds.maxX) <= contactEpsilon) {
+          this.backCollide = true
+        }
       }
-      case Side.right: {
-        const c1 = this.raycasterRight.intersectObject(this.tempMesh).length
-        this.raycasterRight.ray.origin = origin
-        const c2 = this.raycasterRight.intersectObject(this.tempMesh).length
-        c1 || c2 ? (this.rightCollide = true) : (this.rightCollide = false)
-        break
-      }
-      case Side.down: {
-        const c1 = this.raycasterDown.intersectObject(this.tempMesh).length
-        c1 ? (this.downCollide = true) : (this.downCollide = false)
-        break
-      }
-      case Side.up: {
-        const c1 = this.raycasterUp.intersectObject(this.tempMesh).length
-        c1 ? (this.upCollide = true) : (this.upCollide = false)
-        break
+
+      if (overlapY && realOverlapX) {
+        if (Math.abs(bounds.maxZ - blockBounds.minZ) <= contactEpsilon) {
+          this.rightCollide = true
+        }
+        if (Math.abs(bounds.minZ - blockBounds.maxZ) <= contactEpsilon) {
+          this.leftCollide = true
+        }
       }
     }
   }
 
   update = () => {
     this.p1 = performance.now()
-    const delta = (this.p1 - this.p2) / 1000
-    if (
-      // dev mode
-      this.player.mode === Mode.flying
-    ) {
+    const delta = Math.min((this.p1 - this.p2) / 1000, 0.033) // Ограничиваем delta
+    
+    if (this.player.mode === Mode.flying) {
+      // Режим полёта
       this.control.moveForward(this.velocity.x * delta)
       this.control.moveRight(this.velocity.z * delta)
       this.camera.position.y += this.velocity.y * delta
     } else {
-      // normal mode
-      this.collideCheckAll(
-        this.camera.position,
-        this.terrain.noise,
-        this.terrain.customBlocks,
-        this.far - this.velocity.y * delta
-      )
+      // Если игрок уже оказался в блоке, мягко выталкиваем его наружу
+      this.resolvePlayerPenetration()
 
-      // gravity
+      // Гравитация
       if (Math.abs(this.velocity.y) < this.player.falling) {
         this.velocity.y -= 25 * delta
       }
 
-      // up collide handler
-      if (this.upCollide) {
-        this.velocity.y = -225 * delta
-        this.far = this.player.body.height
+      this.resolveHorizontalMovement(delta)
+      this.resolveVerticalMovement(delta)
+      this.collideCheckAll()
+
+      if (this.upCollide && this.velocity.y > 0) {
+        this.velocity.y = 0
       }
 
-      // down collide and jump handler
       if (this.downCollide && !this.isJumping) {
         this.velocity.y = 0
+        this.isJumping = false
       } else if (this.downCollide && this.isJumping) {
+        this.velocity.y = 0
         this.isJumping = false
       }
 
-      // side collide handler
-      let vector = new THREE.Vector3(0, 0, -1).applyQuaternion(
-        this.camera.quaternion
-      )
-      let direction = Math.atan2(vector.x, vector.z)
-      if (
-        this.frontCollide ||
-        this.backCollide ||
-        this.leftCollide ||
-        this.rightCollide
-      ) {
-        // collide front (positive x)
-        if (this.frontCollide) {
-          // camera front
-          if (direction < Math.PI && direction > 0 && this.velocity.x > 0) {
-            if (
-              (!this.leftCollide && direction > Math.PI / 2) ||
-              (!this.rightCollide && direction < Math.PI / 2)
-            ) {
-              this.moveZ(Math.PI / 2 - direction, delta)
-            }
-          } else if (
-            !this.leftCollide &&
-            !this.rightCollide &&
-            this.velocity.x > 0
-          ) {
-            this.control.moveForward(this.velocity.x * delta)
-          }
-
-          // camera back
-          if (direction < 0 && direction > -Math.PI && this.velocity.x < 0) {
-            if (
-              (!this.leftCollide && direction > -Math.PI / 2) ||
-              (!this.rightCollide && direction < -Math.PI / 2)
-            ) {
-              this.moveZ(-Math.PI / 2 - direction, delta)
-            }
-          } else if (
-            !this.leftCollide &&
-            !this.rightCollide &&
-            this.velocity.x < 0
-          ) {
-            this.control.moveForward(this.velocity.x * delta)
-          }
-
-          // camera left
-          if (
-            direction < Math.PI / 2 &&
-            direction > -Math.PI / 2 &&
-            this.velocity.z < 0
-          ) {
-            if (
-              (!this.rightCollide && direction < 0) ||
-              (!this.leftCollide && direction > 0)
-            ) {
-              this.moveZ(-direction, delta)
-            }
-          } else if (
-            !this.leftCollide &&
-            !this.rightCollide &&
-            this.velocity.z < 0
-          ) {
-            this.control.moveRight(this.velocity.z * delta)
-          }
-
-          // camera right
-          if (
-            (direction < -Math.PI / 2 || direction > Math.PI / 2) &&
-            this.velocity.z > 0
-          ) {
-            if (!this.rightCollide && direction > 0) {
-              this.moveZ(Math.PI - direction, delta)
-            }
-            if (!this.leftCollide && direction < 0) {
-              this.moveZ(-Math.PI - direction, delta)
-            }
-          } else if (
-            !this.leftCollide &&
-            !this.rightCollide &&
-            this.velocity.z > 0
-          ) {
-            this.control.moveRight(this.velocity.z * delta)
-          }
-        }
-
-        // collide back (negative x)
-        if (this.backCollide) {
-          // camera front
-          if (direction < 0 && direction > -Math.PI && this.velocity.x > 0) {
-            if (
-              (!this.leftCollide && direction < -Math.PI / 2) ||
-              (!this.rightCollide && direction > -Math.PI / 2)
-            ) {
-              this.moveZ(Math.PI / 2 + direction, delta)
-            }
-          } else if (
-            !this.leftCollide &&
-            !this.rightCollide &&
-            this.velocity.x > 0
-          ) {
-            this.control.moveForward(this.velocity.x * delta)
-          }
-
-          // camera back
-          if (direction < Math.PI && direction > 0 && this.velocity.x < 0) {
-            if (
-              (!this.leftCollide && direction < Math.PI / 2) ||
-              (!this.rightCollide && direction > Math.PI / 2)
-            ) {
-              this.moveZ(direction - Math.PI / 2, delta)
-            }
-          } else if (
-            !this.leftCollide &&
-            !this.rightCollide &&
-            this.velocity.x < 0
-          ) {
-            this.control.moveForward(this.velocity.x * delta)
-          }
-
-          // camera left
-          if (
-            (direction < -Math.PI / 2 || direction > Math.PI / 2) &&
-            this.velocity.z < 0
-          ) {
-            if (!this.leftCollide && direction > 0) {
-              this.moveZ(-Math.PI + direction, delta)
-            }
-            if (!this.rightCollide && direction < 0) {
-              this.moveZ(Math.PI + direction, delta)
-            }
-          } else if (
-            !this.leftCollide &&
-            !this.rightCollide &&
-            this.velocity.z < 0
-          ) {
-            this.control.moveRight(this.velocity.z * delta)
-          }
-
-          // camera right
-          if (
-            direction < Math.PI / 2 &&
-            direction > -Math.PI / 2 &&
-            this.velocity.z > 0
-          ) {
-            if (
-              (!this.leftCollide && direction < 0) ||
-              (!this.rightCollide && direction > 0)
-            ) {
-              this.moveZ(direction, delta)
-            }
-          } else if (
-            !this.leftCollide &&
-            !this.rightCollide &&
-            this.velocity.z > 0
-          ) {
-            this.control.moveRight(this.velocity.z * delta)
-          }
-        }
-
-        // collide left (negative z)
-        if (this.leftCollide) {
-          // camera front
-          if (
-            (direction < -Math.PI / 2 || direction > Math.PI / 2) &&
-            this.velocity.x > 0
-          ) {
-            if (!this.frontCollide && direction > 0) {
-              this.moveX(Math.PI - direction, delta)
-            }
-            if (!this.backCollide && direction < 0) {
-              this.moveX(-Math.PI - direction, delta)
-            }
-          } else if (
-            !this.frontCollide &&
-            !this.backCollide &&
-            this.velocity.x > 0
-          ) {
-            this.control.moveForward(this.velocity.x * delta)
-          } else if (
-            this.frontCollide &&
-            direction < 0 &&
-            direction > -Math.PI / 2 &&
-            this.velocity.x > 0
-          ) {
-            this.control.moveForward(this.velocity.x * delta)
-          } else if (
-            this.backCollide &&
-            direction < Math.PI / 2 &&
-            direction > 0 &&
-            this.velocity.x > 0
-          ) {
-            this.control.moveForward(this.velocity.x * delta)
-          }
-
-          // camera back
-          if (
-            direction < Math.PI / 2 &&
-            direction > -Math.PI / 2 &&
-            this.velocity.x < 0
-          ) {
-            if (
-              (!this.frontCollide && direction < 0) ||
-              (!this.backCollide && direction > 0)
-            ) {
-              this.moveX(-direction, delta)
-            }
-          } else if (
-            !this.frontCollide &&
-            !this.backCollide &&
-            this.velocity.x < 0
-          ) {
-            this.control.moveForward(this.velocity.x * delta)
-          } else if (
-            this.frontCollide &&
-            direction < Math.PI &&
-            direction > Math.PI / 2 &&
-            this.velocity.x < 0
-          ) {
-            this.control.moveForward(this.velocity.x * delta)
-          } else if (
-            this.backCollide &&
-            direction > -Math.PI &&
-            direction < -Math.PI / 2 &&
-            this.velocity.x < 0
-          ) {
-            this.control.moveForward(this.velocity.x * delta)
-          }
-
-          // camera left
-          if (direction > 0 && direction < Math.PI && this.velocity.z < 0) {
-            if (
-              (!this.backCollide && direction > Math.PI / 2) ||
-              (!this.frontCollide && direction < Math.PI / 2)
-            ) {
-              this.moveX(Math.PI / 2 - direction, delta)
-            }
-          } else if (
-            !this.frontCollide &&
-            !this.backCollide &&
-            this.velocity.z < 0
-          ) {
-            this.control.moveRight(this.velocity.z * delta)
-          } else if (
-            this.frontCollide &&
-            direction > -Math.PI &&
-            direction < -Math.PI / 2 &&
-            this.velocity.z < 0
-          ) {
-            this.control.moveRight(this.velocity.z * delta)
-          } else if (
-            this.backCollide &&
-            direction > -Math.PI / 2 &&
-            direction < 0 &&
-            this.velocity.z < 0
-          ) {
-            this.control.moveRight(this.velocity.z * delta)
-          }
-
-          // camera right
-          if (direction < 0 && direction > -Math.PI && this.velocity.z > 0) {
-            if (
-              (!this.backCollide && direction > -Math.PI / 2) ||
-              (!this.frontCollide && direction < -Math.PI / 2)
-            ) {
-              this.moveX(-Math.PI / 2 - direction, delta)
-            }
-          } else if (
-            !this.frontCollide &&
-            !this.backCollide &&
-            this.velocity.z > 0
-          ) {
-            this.control.moveRight(this.velocity.z * delta)
-          } else if (
-            this.frontCollide &&
-            direction < Math.PI / 2 &&
-            direction > 0 &&
-            this.velocity.z > 0
-          ) {
-            this.control.moveRight(this.velocity.z * delta)
-          } else if (
-            this.backCollide &&
-            direction < Math.PI &&
-            direction > Math.PI / 2 &&
-            this.velocity.z > 0
-          ) {
-            this.control.moveRight(this.velocity.z * delta)
-          }
-        }
-
-        // collide right (positive z)
-        if (this.rightCollide) {
-          // camera front
-          if (
-            direction < Math.PI / 2 &&
-            direction > -Math.PI / 2 &&
-            this.velocity.x > 0
-          ) {
-            if (
-              (!this.backCollide && direction < 0) ||
-              (!this.frontCollide && direction > 0)
-            ) {
-              this.moveX(direction, delta)
-            }
-          } else if (
-            !this.frontCollide &&
-            !this.backCollide &&
-            this.velocity.x > 0
-          ) {
-            this.control.moveForward(this.velocity.x * delta)
-          } else if (
-            this.frontCollide &&
-            direction < -Math.PI / 2 &&
-            direction > -Math.PI &&
-            this.velocity.x > 0
-          ) {
-            this.control.moveForward(this.velocity.x * delta)
-          } else if (
-            this.backCollide &&
-            direction < Math.PI &&
-            direction > Math.PI / 2 &&
-            this.velocity.x > 0
-          ) {
-            this.control.moveForward(this.velocity.x * delta)
-          }
-
-          // camera back
-          if (
-            (direction < -Math.PI / 2 || direction > Math.PI / 2) &&
-            this.velocity.x < 0
-          ) {
-            if (!this.backCollide && direction > 0) {
-              this.moveX(-Math.PI + direction, delta)
-            }
-            if (!this.frontCollide && direction < 0) {
-              this.moveX(Math.PI + direction, delta)
-            }
-          } else if (
-            !this.frontCollide &&
-            !this.backCollide &&
-            this.velocity.x < 0
-          ) {
-            this.control.moveForward(this.velocity.x * delta)
-          } else if (
-            this.frontCollide &&
-            direction < Math.PI / 2 &&
-            direction > 0 &&
-            this.velocity.x < 0
-          ) {
-            this.control.moveForward(this.velocity.x * delta)
-          } else if (
-            this.backCollide &&
-            direction < 0 &&
-            direction > -Math.PI / 2 &&
-            this.velocity.x < 0
-          ) {
-            this.control.moveForward(this.velocity.x * delta)
-          }
-
-          // camera left
-          if (direction < 0 && direction > -Math.PI && this.velocity.z < 0) {
-            if (
-              (!this.frontCollide && direction > -Math.PI / 2) ||
-              (!this.backCollide && direction < -Math.PI / 2)
-            ) {
-              this.moveX(Math.PI / 2 + direction, delta)
-            }
-          } else if (
-            !this.frontCollide &&
-            !this.backCollide &&
-            this.velocity.z < 0
-          ) {
-            this.control.moveRight(this.velocity.z * delta)
-          } else if (
-            this.frontCollide &&
-            direction > Math.PI / 2 &&
-            direction < Math.PI &&
-            this.velocity.z < 0
-          ) {
-            this.control.moveRight(this.velocity.z * delta)
-          } else if (
-            this.backCollide &&
-            direction > 0 &&
-            direction < Math.PI / 2 &&
-            this.velocity.z < 0
-          ) {
-            this.control.moveRight(this.velocity.z * delta)
-          }
-
-          // camera right
-          if (direction > 0 && direction < Math.PI && this.velocity.z > 0) {
-            if (
-              (!this.frontCollide && direction > Math.PI / 2) ||
-              (!this.backCollide && direction < Math.PI / 2)
-            ) {
-              this.moveX(direction - Math.PI / 2, delta)
-            }
-          } else if (
-            !this.frontCollide &&
-            !this.backCollide &&
-            this.velocity.z > 0
-          ) {
-            this.control.moveRight(this.velocity.z * delta)
-          } else if (
-            this.frontCollide &&
-            direction > -Math.PI / 2 &&
-            direction < 0 &&
-            this.velocity.z > 0
-          ) {
-            this.control.moveRight(this.velocity.z * delta)
-          } else if (
-            this.backCollide &&
-            direction > -Math.PI &&
-            direction < -Math.PI / 2 &&
-            this.velocity.z > 0
-          ) {
-            this.control.moveRight(this.velocity.z * delta)
-          }
-        }
-      } else {
-        // no collide
-        this.control.moveForward(this.velocity.x * delta)
-        this.control.moveRight(this.velocity.z * delta)
-      }
-
-      this.camera.position.y += this.velocity.y * delta
-
-      // catching net
+      // Защита от падения в бездну
       if (this.camera.position.y < -100) {
         this.camera.position.y = 60
       }

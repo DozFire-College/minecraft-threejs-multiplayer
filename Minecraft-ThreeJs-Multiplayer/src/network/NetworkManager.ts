@@ -5,6 +5,8 @@ export class NetworkManager {
     private reconnectTimer: number | null = null;
     private serverUrl: string;
     private otherPlayers: Map<string, any> = new Map();
+    private chunkRequestDelay = 40
+    private lastChunkRequestTime = 0
 
     constructor(serverUrl: string = 'ws://localhost:3000') {
         this.serverUrl = serverUrl;
@@ -63,6 +65,7 @@ export class NetworkManager {
         });
     }
 
+    
     private scheduleReconnect() {
         if (!this.reconnectTimer) {
             console.log('🔄 Попытка переподключения через 3 секунды...');
@@ -120,12 +123,33 @@ export class NetworkManager {
         this.send('playerPosition', { position, rotation });
     }
 
-    send(type: string, data: any = {}) {
-        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            const message = { type, data };
-            this.socket.send(JSON.stringify(message));
-        }
+   send(type: string, data: any = {}) {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        const message = { type, data };
+        this.socket.send(JSON.stringify(message));
     }
+
+  }
+  requestChunk(chunkX: number, chunkZ: number) {
+    const now = Date.now()
+    if (now - this.lastChunkRequestTime < this.chunkRequestDelay) {
+      setTimeout(() => this.requestChunk(chunkX, chunkZ), this.chunkRequestDelay)
+      return
+    }
+    this.lastChunkRequestTime = now
+    this.send('requestChunk', { chunkX, chunkZ })
+  }
+  breakBlock(x: number, y: number, z: number) {
+    this.send('blockBreak', { x, y, z });
+  }
+  
+  placeBlock(x: number, y: number, z: number, type: number) {
+    this.send('blockPlace', { position: { x, y, z }, type });
+  }
+  
+  requestChunks(centerX: number, centerZ: number, radius: number = 3) {
+    this.send('requestChunks', { centerX, centerZ, radius });
+  }
 
     on(type: string, callback: (data: any) => void) {
         this.onMessageCallbacks.set(type, callback);
@@ -133,6 +157,12 @@ export class NetworkManager {
 
     getOtherPlayers(): Map<string, any> {
         return this.otherPlayers;
+    }
+    getWorldSeed(): number {
+        return 12345 
+    }
+    syncWorldSeed() {
+        this.send('worldSeed', { seed: this.getWorldSeed() })
     }
 
     disconnect() {
@@ -149,7 +179,7 @@ export class NetworkManager {
         return this.playerId;
     }
 
-    isConnected(): boolean {
-        return this.socket !== null && this.socket.readyState === WebSocket.OPEN;
-    }
+    public isConnected = (): boolean => {
+  return this.socket !== null && this.socket.readyState === WebSocket.OPEN
+}
 }

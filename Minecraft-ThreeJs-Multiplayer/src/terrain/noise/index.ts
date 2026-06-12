@@ -2,6 +2,7 @@ import { ImprovedNoise } from 'three/examples/jsm/math/ImprovedNoise'
 // import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise'
 
 export default class Noise {
+
   noise = new ImprovedNoise()
   seed = Math.random()
   gap = 22
