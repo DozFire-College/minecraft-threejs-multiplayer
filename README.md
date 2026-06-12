@@ -26,12 +26,6 @@ Recommend to use Chrome to get the best experience
 - Basic UI and settings
 - Mobile friendly
 
-## Working on:
-
-- Multiplayer
-- Generates water
-- Higher performance algorithm
-
 # Issues
 
 1. Creating a WebSocket Networking Library -> ✅
