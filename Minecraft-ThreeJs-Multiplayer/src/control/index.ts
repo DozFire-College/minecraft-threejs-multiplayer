@@ -287,12 +287,12 @@ export default class Control {
               (BlockType[block.object.name as any] as unknown as BlockType) ===
               BlockType.bedrock
             ) {
-              // Отправляем запрос на генерацию соседних блоков на сервер
+           
               this.terrain.generateAdjacentBlocks(position)
               return
             }
 
-            // Отправляем запрос на удаление блока на сервер
+         
             this.terrain.networkManager?.send('blockBreak', {
               x: position.x,
               y: position.y,
@@ -300,7 +300,7 @@ export default class Control {
             })
             this.terrain.removeBlockAtPosition(position)
 
-            // Визуальный эффект и звук (локально для отзывчивости)
+           
             this.audio.playSound(
               BlockType[block.object.name as any] as unknown as BlockType
             )
@@ -348,10 +348,10 @@ export default class Control {
               return
             }
 
-            // Отправляем запрос на установку блока на сервер
+         
             this.terrain.buildBlock(new THREE.Vector3(newX, newY, newZ), this.holdingBlock)
 
-            // Звук (локально)
+          
             this.audio.playSound(this.holdingBlock)
           }
         }
@@ -696,12 +696,12 @@ export default class Control {
     const delta = Math.min((this.p1 - this.p2) / 1000, 0.033) // Ограничиваем delta
     
     if (this.player.mode === Mode.flying) {
-      // Режим полёта
+  
       this.control.moveForward(this.velocity.x * delta)
       this.control.moveRight(this.velocity.z * delta)
       this.camera.position.y += this.velocity.y * delta
     } else {
-      // Если игрок уже оказался в блоке, мягко выталкиваем его наружу
+  
       this.resolvePlayerPenetration()
 
       // Гравитация
@@ -725,7 +725,7 @@ export default class Control {
         this.isJumping = false
       }
 
-      // Защита от падения в бездну
+    
       if (this.camera.position.y < -100) {
         this.camera.position.y = 60
       }

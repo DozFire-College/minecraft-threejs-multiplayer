@@ -25,7 +25,7 @@ const clients = new Map<string, WebSocket>();
 const players = new Map<string, PlayerData>();
 let nextPlayerId = 1;
 
-// Функция для вычисления хеша чанка (для отладки)
+
 function computeChunkHash(blocks: Map<string, number>): string {
     let hash = 0;
     for (const [key, value] of blocks) {
@@ -35,7 +35,7 @@ function computeChunkHash(blocks: Map<string, number>): string {
     return hash.toString(16);
 }
 
-// Функция генерации дерева (упрощённая и детерминированная)
+
 function generateTree(blocks: Map<string, number>, x: number, z: number, groundHeight: number) {
     // Ствол дерева (высота 10 блоков)
     for (let i = 1; i <= 10; i++) {
@@ -45,7 +45,7 @@ function generateTree(blocks: Map<string, number>, x: number, z: number, groundH
         }
     }
     
-    // Простая пирамидальная листва
+  
     const leafStartY = groundHeight + 10;
     
     // Верхушка
@@ -59,7 +59,7 @@ function generateTree(blocks: Map<string, number>, x: number, z: number, groundH
         }
     }
     
-    // Слой 2
+   
     for (let dx = -2; dx <= 2; dx++) {
         for (let dz = -2; dz <= 2; dz++) {
             if (Math.abs(dx) + Math.abs(dz) <= 3) {
@@ -68,7 +68,7 @@ function generateTree(blocks: Map<string, number>, x: number, z: number, groundH
         }
     }
     
-    // Слой 3 (нижний)
+  
     for (let dx = -1; dx <= 1; dx++) {
         for (let dz = -1; dz <= 1; dz++) {
             blocks.set(`${x + dx}_${leafStartY - 1}_${z + dz}`, 3);
@@ -76,7 +76,7 @@ function generateTree(blocks: Map<string, number>, x: number, z: number, groundH
     }
 }
 
-// Функция генерации чанка (детерминированная)
+
 function generateChunk(chunkX: number, chunkZ: number, chunkSize: number = CHUNK_SIZE): Map<string, number> {
     const chunkKey = `${chunkX}_${chunkZ}`;
     
@@ -89,12 +89,11 @@ function generateChunk(chunkX: number, chunkZ: number, chunkSize: number = CHUNK
     console.log(`🆕 Генерация нового чанка ${chunkKey}`);
     const blocks = new Map<string, number>();
     
-    // Детерминированная генерация - всегда одинаковый порядок
+  
     for (let x = chunkX * chunkSize; x < (chunkX + 1) * chunkSize; x++) {
         for (let z = chunkZ * chunkSize; z < (chunkZ + 1) * chunkSize; z++) {
             const groundHeight = worldGenerator.getGroundHeight(x, z);
-            
-            // Генерируем все слои от bedrock до поверхности
+   
             for (let y = 0; y <= groundHeight; y++) {
                 const blockType = worldGenerator.getBlockType(x, y, z);
                 if (blockType !== null) {
@@ -102,7 +101,7 @@ function generateChunk(chunkX: number, chunkZ: number, chunkSize: number = CHUNK
                 }
             }
             
-            // Генерируем деревья
+  
             if (worldGenerator.shouldGenerateTree(x, z, groundHeight)) {
                 generateTree(blocks, x, z, groundHeight);
             }
@@ -113,7 +112,7 @@ function generateChunk(chunkX: number, chunkZ: number, chunkSize: number = CHUNK
     chunkCache.set(chunkKey, { blocks, hash });
     console.log(`🌲 Чанк ${chunkKey} сгенерирован, блоков: ${blocks.size}, хеш: ${hash}`);
     
-    // Возвращаем копию, чтобы не изменять оригинал
+  
     return new Map(blocks);
 }
 
@@ -141,7 +140,6 @@ function applyBlockUpdate(x: number, y: number, z: number, type: number | null) 
     chunkEntry.hash = computeChunkHash(chunkEntry.blocks);
 }
 
-// Отправка чанка игроку
 function sendChunkToPlayer(ws: WebSocket, chunkX: number, chunkZ: number) {
     const chunk = ensureChunkCached(chunkX, chunkZ);
     const blocksArray = Array.from(chunk.blocks.entries());
@@ -197,7 +195,6 @@ wss.on('connection', (ws: WebSocket) => {
             rotation: player.rotation
         }));
 
-    // Отправляем приветствие с seed мира
     ws.send(JSON.stringify({
         type: 'welcome',
         data: {
@@ -210,13 +207,12 @@ wss.on('connection', (ws: WebSocket) => {
 
     console.log(`📦 Игрок ${playerId} подключён. Чанки будут загружаться по запросу клиента.`);
 
-    // Сообщаем всем остальным о новом игроке
     broadcast({
         type: 'playerJoined',
         data: { id: playerId, position: playerData.position, rotation: playerData.rotation }
     }, playerId);
 
-    // Обработка сообщений от клиента
+
     ws.on('message', (rawMessage: Buffer) => {
         try {
             const message = JSON.parse(rawMessage.toString());
@@ -277,7 +273,7 @@ wss.on('connection', (ws: WebSocket) => {
                     break;
                     
                 case 'generateAdjacent':
-                    // Генерация соседних блоков
+   
                     break;
             }
         } catch (error) {
@@ -310,7 +306,7 @@ function broadcast(message: object, excludePlayerId?: string) {
     });
 }
 
-// Периодический вывод статистики
+
 setInterval(() => {
     console.log(`📊 Статистика: игроков=${clients.size}, чанков в кэше=${chunkCache.size}`);
     // Выводим список чанков в кэше для отладки
@@ -319,7 +315,7 @@ setInterval(() => {
     }
 }, 30000);
 
-// Команда для очистки кэша (можно вызвать через сигнал)
+
 process.on('SIGUSR2', () => {
     console.log('🗑️ Очистка кэша чанков...');
     chunkCache.clear();

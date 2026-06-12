@@ -60,7 +60,7 @@ export default class Terrain {
   private chunksLoaded = new Set<string>()
   private requestedChunks = new Set<string>()
   
-  // Очереди для оптимизации
+ 
   private pendingChunks: { chunkX: number; chunkZ: number }[] = []
   private isProcessing = false
   
@@ -175,7 +175,7 @@ export default class Terrain {
     
     this.isProcessingChunks = true
     
-    // Обрабатываем только один чанк за раз
+
     const firstChunk = this.pendingChunkData.entries().next()
     if (!firstChunk.done) {
       const [chunkKey, blocksMap] = firstChunk.value
@@ -475,8 +475,7 @@ export default class Terrain {
   }
 
   public syncCollisions = () => {
-    // Состояние мира теперь синхронизируется через blockMap и O(1)-обновления,
-    // поэтому дорогая полная сверка больше не нужна.
+   
   }
 
   public getNearbyBlocks = (
@@ -522,7 +521,7 @@ export default class Terrain {
     this.previousChunk.copy(this.chunk)
     this.highlight.update()
     
-    // Периодическая синхронизация
+
     const now = Date.now()
     if (now - this.lastSyncTime > this.syncInterval) {
       this.lastSyncTime = now
@@ -530,7 +529,6 @@ export default class Terrain {
     }
   }
 
-  // Методы для совместимости с другими частями кода
   buildBlock = (position: THREE.Vector3, type: BlockType) => {
     this.addBlockAtPosition(position, type)
     this.networkManager.send('blockPlace', {

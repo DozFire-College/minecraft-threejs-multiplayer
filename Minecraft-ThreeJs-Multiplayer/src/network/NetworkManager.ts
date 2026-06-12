@@ -80,7 +80,7 @@ export class NetworkManager {
     private handleMessage(message: any) {
         const { type, data } = message;
         
-        // Вызываем зарегистрированные обработчики
+       
         const callback = this.onMessageCallbacks.get(type);
         if (callback) {
             callback(data);
@@ -90,7 +90,7 @@ export class NetworkManager {
             case 'welcome':
                 this.playerId = data.playerId;
                 console.log(`👤 Мой ID: ${this.playerId}`);
-                // Сохраняем всех существующих игроков
+             
                 if (data.players) {
                     data.players.forEach((p: any) => {
                         if (p.id !== this.playerId) {
@@ -118,7 +118,7 @@ export class NetworkManager {
         }
     }
 
-    // Отправка позиции на сервер
+  
     sendPosition(position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) {
         this.send('playerPosition', { position, rotation });
     }

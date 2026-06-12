@@ -29,32 +29,27 @@ export default class UI {
       if (this.play?.innerHTML === 'Play') {
         this.onPlay()
 
-        // В серверном режиме не пересоздаём мир локально
-        // Просто запрашиваем чанки заново
+       
         terrain.resetBlocks()
         terrain.initBlocks()
-        terrain.generate() // Запросит чанки с сервера
+        terrain.generate() 
         terrain.camera.position.y = 40
         control.player.setMode(Mode.walking)
       }
       !isMobile && control.control.lock()
     })
 
-    // save load - в серверном режиме save/load не имеют смысла
-    // так как мир хранится на сервере
+  
     this.save?.addEventListener('click', () => {
       if (this.save?.innerHTML === 'Save and Exit') {
-        // В серверном режиме save не нужен, просто показываем сообщение
         this.showMessage("World is saved on server automatically")
         
         // ui update
         this.onExit()
         this.onSave()
       } else {
-        // Load game - в серверном режиме не нужно, мир всегда загружается с сервера
         this.showMessage("World loads from server automatically")
-        
-        // Просто перезапрашиваем чанки
+
         terrain.resetBlocks()
         terrain.initBlocks()
         terrain.generate()
@@ -200,7 +195,6 @@ export default class UI {
 
   settingBack = document.querySelector('#setting-back')
 
-  // Добавляем метод для показа сообщений
   private showMessage = (message: string) => {
     const messageDiv = document.createElement('div')
     messageDiv.className = 'toast-message'

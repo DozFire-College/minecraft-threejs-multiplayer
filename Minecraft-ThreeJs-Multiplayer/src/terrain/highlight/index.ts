@@ -35,13 +35,13 @@ export default class BlockHighlight {
   currentHighlightedPosition: THREE.Vector3 | null = null
 
   update() {
-    // Удаляем старую подсветку
+  
     if (this.currentHighlightedPosition) {
       this.scene.remove(this.mesh)
       this.currentHighlightedPosition = null
     }
     
-    // Рейкастинг напрямую по блокам террейна
+
     this.raycaster.setFromCamera({ x: 0, y: 0 }, this.camera)
     const intersects = this.raycaster.intersectObjects(this.terrain.blocks)
     
@@ -53,7 +53,7 @@ export default class BlockHighlight {
         hit.object.getMatrixAt(hit.instanceId, matrix)
         const position = new THREE.Vector3().setFromMatrixPosition(matrix)
         
-        // Проверяем, не bedrock ли это
+  
         const blockType = BlockType[hit.object.name as any] as unknown as BlockType
         
         if (blockType !== BlockType.bedrock) {

@@ -47,8 +47,7 @@ export class ServerNoise {
     
     if (y > groundHeight) return null;
     if (y === 0) return 11; // bedrock
-    
-    // Подземные блоки
+ 
     if (y < groundHeight) {
       const stoneOffset = this.get3D(x / this.stoneGap, y / this.stoneGap, z / this.stoneGap) * this.stoneAmp;
       
@@ -62,7 +61,7 @@ export class ServerNoise {
       return 5; // stone
     }
     
-    // Поверхность
+  
     if (y === groundHeight) {
       const stoneOffset = this.get3D(x / this.stoneGap, y / this.stoneGap, z / this.stoneGap) * this.stoneAmp;
       
@@ -77,7 +76,7 @@ export class ServerNoise {
       return 0; // grass
     }
     
-    // Слой под травой
+
     if (y === groundHeight - 1) {
       return 4; // dirt
     }
