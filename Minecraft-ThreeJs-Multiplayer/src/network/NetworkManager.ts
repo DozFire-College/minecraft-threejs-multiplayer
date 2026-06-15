@@ -1,10 +1,19 @@
+export type NetworkPlayerState = {
+    id: string;
+    nickname?: string;
+    position: { x: number; y: number; z: number };
+    rotation: { yaw: number; pitch: number };
+    isMoving: boolean;
+    avatarYaw: number;
+}
+
 export class NetworkManager {
     private socket: WebSocket | null = null;
     private playerId: string = '';
     private onMessageCallbacks: Map<string, (data: any) => void> = new Map();
     private reconnectTimer: number | null = null;
     private serverUrl: string;
-    private otherPlayers: Map<string, any> = new Map();
+    private otherPlayers: Map<string, NetworkPlayerState> = new Map();
     private chunkRequestDelay = 40
     private lastChunkRequestTime = 0
 
@@ -15,6 +24,11 @@ export class NetworkManager {
     connect(): Promise<void> {
         return new Promise((resolve, reject) => {
             try {
+                if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
+                    resolve();
+                    return;
+                }
+
                 console.log('🔌 Пытаюсь подключиться к:', this.serverUrl);
                 this.socket = new WebSocket(this.serverUrl);
                 
@@ -92,52 +106,93 @@ export class NetworkManager {
                 console.log(`👤 Мой ID: ${this.playerId}`);
              
                 if (data.players) {
-                    data.players.forEach((p: any) => {
+                    data.players.forEach((p: NetworkPlayerState) => {
                         if (p.id !== this.playerId) {
-                            this.otherPlayers.set(p.id, p);
+                            this.otherPlayers.set(p.id, {
+                                ...p,
+                                nickname: p.nickname ?? p.id,
+                                isMoving: p.isMoving ?? false,
+                                avatarYaw: p.avatarYaw ?? Math.PI
+                            });
                         }
                     });
                 }
                 break;
                 
             case 'playerJoined':
-                this.otherPlayers.set(data.id, data);
+                this.otherPlayers.set(data.id, {
+                    ...data,
+                    nickname: data.nickname ?? data.id,
+                    isMoving: data.isMoving ?? false,
+                    avatarYaw: data.avatarYaw ?? Math.PI
+                });
                 break;
                 
             case 'playerMoved':
                 if (this.otherPlayers.has(data.id)) {
                     const player = this.otherPlayers.get(data.id);
+                    if (!player) {
+                        break;
+                    }
+
                     player.position = data.position;
                     player.rotation = data.rotation;
+                    player.isMoving = data.isMoving ?? false;
+                    player.avatarYaw = data.avatarYaw ?? player.avatarYaw;
                 }
                 break;
                 
             case 'playerLeft':
                 this.otherPlayers.delete(data.id);
                 break;
+
+            case 'playerNickname':
+                if (this.otherPlayers.has(data.id)) {
+                    const player = this.otherPlayers.get(data.id);
+                    if (!player) {
+                        break;
+                    }
+                    player.nickname = typeof data.nickname === 'string' ? data.nickname : player.nickname;
+                }
+                break;
         }
     }
 
   
-    sendPosition(position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) {
-        this.send('playerPosition', { position, rotation });
+    sendPosition(
+        position: { x: number; y: number; z: number },
+        rotation: { yaw: number; pitch: number },
+        state: { isMoving: boolean; avatarYaw: number }
+    ) {
+        this.send('playerPosition', { position, rotation, ...state });
     }
 
-   send(type: string, data: any = {}) {
+    setNickname(nickname: string) {
+        this.send('setNickname', { nickname })
+    }
+
+   send(type: string, data: any = {}): boolean {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
         const message = { type, data };
         this.socket.send(JSON.stringify(message));
+        return true
     }
 
+    return false
   }
-  requestChunk(chunkX: number, chunkZ: number) {
+
+  requestChunk(chunkX: number, chunkZ: number): boolean {
+    if (!this.isConnected()) {
+      return false
+    }
+
     const now = Date.now()
     if (now - this.lastChunkRequestTime < this.chunkRequestDelay) {
       setTimeout(() => this.requestChunk(chunkX, chunkZ), this.chunkRequestDelay)
-      return
+      return true
     }
     this.lastChunkRequestTime = now
-    this.send('requestChunk', { chunkX, chunkZ })
+    return this.send('requestChunk', { chunkX, chunkZ })
   }
   breakBlock(x: number, y: number, z: number) {
     this.send('blockBreak', { x, y, z });
@@ -155,7 +210,7 @@ export class NetworkManager {
         this.onMessageCallbacks.set(type, callback);
     }
 
-    getOtherPlayers(): Map<string, any> {
+    getOtherPlayers(): Map<string, NetworkPlayerState> {
         return this.otherPlayers;
     }
     getWorldSeed(): number {

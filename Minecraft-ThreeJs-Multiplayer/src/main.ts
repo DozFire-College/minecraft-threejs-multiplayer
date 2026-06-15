@@ -1,7 +1,7 @@
-import * as THREE from 'three'
 import Core from './core'
 import Control from './control'
 import Player from './player'
+import PlayerAvatar from './player/PlayerAvatar'
 import Terrain from './terrain'
 import UI from './ui'
 import Audio from './audio'
@@ -12,10 +12,11 @@ import './style.css'
 // ========== SETTING SERVER ==========
 // change your IP in cmd 'ipconfig'
 // For example: 'ws://192.168.1.5:3000'
-const SERVER_URL = 'ws://192.168.1.3:3000'
+const SERVER_URL = `ws://${window.location.hostname || 'localhost'}:3000`
 
 const networkManager = new NetworkManager(SERVER_URL)
 let worldSeed = 12345
+let localNickname = ''
 
 let terrain: Terrain
 let control: Control
@@ -35,46 +36,67 @@ audio = new Audio(camera)
 
 terrain = new Terrain(scene, camera, networkManager)
 control = new Control(scene, camera, player, terrain, audio)
-ui = new UI(terrain, control)
 
-const otherPlayerMeshes = new Map<string, THREE.Mesh>()
+const localPlayerAvatar = new PlayerAvatar(scene, {
+    isLocal: true,
+    eyeHeight: player.body.eyeHeight
+})
+const otherPlayerAvatars = new Map<string, PlayerAvatar>()
 
-function createPlayerMesh(): THREE.Mesh {
-    const geometry = new THREE.BoxGeometry(0.6, 1.8, 0.6)
-    const material = new THREE.MeshLambertMaterial({ color: 0xff0000 })
-    const mesh = new THREE.Mesh(geometry, material)
-    mesh.position.y = 0.9
-    return mesh
+function setLocalNickname(nickname: string) {
+    localNickname = nickname.trim().slice(0, 16)
+    localPlayerAvatar.setNickname(localNickname)
+    if (networkManager.isConnected()) {
+        networkManager.setNickname(localNickname)
+    }
+}
+
+ui = new UI(terrain, control, networkManager, setLocalNickname)
+
+networkManager.connect().catch(error => {
+    console.error('❌ Не удалось подключиться к серверу:', error)
+})
+
+function updateLocalPlayerAvatar() {
+    localPlayerAvatar.setViewMode(control.getViewMode())
+    localPlayerAvatar.setNickname(localNickname)
+    localPlayerAvatar.setTransform(
+        { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+        control.getAvatarYaw(),
+        control.isMoving(),
+        { yaw: camera.rotation.y, pitch: camera.rotation.x }
+    )
 }
 
 function updateOtherPlayers() {
     const players = networkManager.getOtherPlayers()
     
     players.forEach((data, playerId) => {
-        let mesh = otherPlayerMeshes.get(playerId)
+        let avatar = otherPlayerAvatars.get(playerId)
         
-        if (!mesh) {
-            mesh = createPlayerMesh()
-            scene.add(mesh)
-            otherPlayerMeshes.set(playerId, mesh)
+        if (!avatar) {
+            avatar = new PlayerAvatar(scene, {
+                eyeHeight: player.body.eyeHeight
+            })
+            otherPlayerAvatars.set(playerId, avatar)
             console.log(`🎮 Создан визуал для игрока ${playerId}`)
         }
         
         if (data.position) {
-            mesh.position.set(data.position.x, data.position.y - 1, data.position.z)
+            avatar.setNickname(data.nickname ?? playerId)
+            avatar.setTransform(
+                data.position,
+                data.avatarYaw ?? data.rotation.yaw + Math.PI,
+                data.isMoving ?? false,
+                data.rotation
+            )
         }
     })
     
-    otherPlayerMeshes.forEach((mesh, playerId) => {
+    otherPlayerAvatars.forEach((avatar, playerId) => {
         if (!players.has(playerId)) {
-            scene.remove(mesh)
-            mesh.geometry.dispose()
-            if (Array.isArray(mesh.material)) {
-                mesh.material.forEach(m => m.dispose())
-            } else {
-                mesh.material.dispose()
-            }
-            otherPlayerMeshes.delete(playerId)
+            avatar.dispose()
+            otherPlayerAvatars.delete(playerId)
             console.log(`🗑️ Удалён визуал игрока ${playerId}`)
         }
     })
@@ -98,6 +120,16 @@ networkManager.on('welcome', (data: any) => {
     if (data.spawnPosition) {
         camera.position.set(data.spawnPosition.x, data.spawnPosition.y, data.spawnPosition.z)
     }
+
+    const storedNickname = localStorage.getItem('nickname') || ''
+    if (storedNickname) {
+        setLocalNickname(storedNickname)
+        networkManager.setNickname(storedNickname)
+    } else if (typeof data.nickname === 'string') {
+        setLocalNickname(data.nickname)
+    } else if (typeof data.playerId === 'string') {
+        setLocalNickname(data.playerId)
+    }
 })
 
 networkManager.on('playerLeft', (data: any) => {
@@ -113,6 +145,7 @@ function animate() {
     control.update()
     terrain.update()
     ui.update()
+    updateLocalPlayerAvatar()
 
     const now = performance.now()
     if (networkManager.isConnected() && now - lastSendTime > SEND_INTERVAL) {
@@ -121,13 +154,16 @@ function animate() {
         const rot = camera.rotation
         networkManager.sendPosition(
             { x: pos.x, y: pos.y, z: pos.z },
-            { yaw: rot.y, pitch: rot.x }
+            { yaw: rot.y, pitch: rot.x },
+            { isMoving: control.isMoving(), avatarYaw: control.getAvatarYaw() }
         )
     }
 
     updateOtherPlayers()
 
+    control.prepareCameraForRender()
     renderer.render(scene, camera)
+    control.restoreCameraAfterRender()
 }
 
 animate()
@@ -147,16 +183,12 @@ window.addEventListener('beforeunload', () => {
         networkManager.disconnect()
     }
 
-    otherPlayerMeshes.forEach((mesh) => {
-        scene.remove(mesh)
-        mesh.geometry.dispose()
-        if (Array.isArray(mesh.material)) {
-            mesh.material.forEach(m => m.dispose())
-        } else {
-            mesh.material.dispose()
-        }
+    localPlayerAvatar.dispose()
+
+    otherPlayerAvatars.forEach((avatar) => {
+        avatar.dispose()
     })
-    otherPlayerMeshes.clear()
+    otherPlayerAvatars.clear()
 
     if (audio && audio.dispose) {
         audio.dispose()

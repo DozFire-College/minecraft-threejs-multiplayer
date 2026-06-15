@@ -75,7 +75,8 @@ export default class Materials {
       new THREE.MeshStandardMaterial({ map: grassMaterial }),
       new THREE.MeshStandardMaterial({ map: grassMaterial }),
       new THREE.MeshStandardMaterial({
-        map: grassTopMaterial
+        map: grassTopMaterial,
+        color: new THREE.Color(0.78, 0.78, 0.78)
       }),
       new THREE.MeshStandardMaterial({ map: dirtMaterial }),
       new THREE.MeshStandardMaterial({ map: grassMaterial }),
@@ -93,7 +94,7 @@ export default class Materials {
     ],
     leaf: new THREE.MeshStandardMaterial({
       map: leafMaterial,
-      color: new THREE.Color(0, 1, 0),
+      color: new THREE.Color(0.75, 0.9, 0.75),
       transparent: true
     }),
     // water: new THREE.MeshStandardMaterial({

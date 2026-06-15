@@ -389,13 +389,20 @@ export default class Terrain {
 
   private processQueue = () => {
     if (this.isProcessing || this.pendingChunks.length === 0) return
+    if (!this.networkManager.isConnected()) {
+      return
+    }
     this.isProcessing = true
 
     const chunk = this.pendingChunks.shift()
     if (chunk) {
       const chunkKey = `${chunk.chunkX}_${chunk.chunkZ}`
-      this.requestedChunks.add(chunkKey)
-      this.networkManager.requestChunk(chunk.chunkX, chunk.chunkZ)
+      const requested = this.networkManager.requestChunk(chunk.chunkX, chunk.chunkZ)
+      if (requested) {
+        this.requestedChunks.add(chunkKey)
+      } else {
+        this.pendingChunks.unshift(chunk)
+      }
     }
 
     this.isProcessing = false

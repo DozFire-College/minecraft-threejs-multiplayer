@@ -6,9 +6,15 @@ import Control from '../control'
 import { Mode } from '../player'
 import Joystick from './joystick'
 import { isMobile } from '../utils'
+import { NetworkManager } from '../network/NetworkManager'
 
 export default class UI {
-  constructor(terrain: Terrain, control: Control) {
+  constructor(
+    terrain: Terrain,
+    control: Control,
+    networkManager: NetworkManager,
+    onNicknameChange: (nickname: string) => void
+  ) {
     this.fps = new FPS()
     this.bag = new Bag()
     this.joystick = new Joystick(control)
@@ -22,6 +28,10 @@ export default class UI {
     }
     if (this.distance) {
       this.distance.innerHTML = `Render Distance: ${terrain.distance}`
+    }
+
+    if (this.nicknameInput instanceof HTMLInputElement) {
+      this.nicknameInput.value = localStorage.getItem('nickname') || ''
     }
 
     // play
@@ -115,6 +125,13 @@ export default class UI {
         terrain.generate() // Перезапросим чанки с новой дистанцией
         terrain.updateFog()
       }
+
+      if (this.nicknameInput instanceof HTMLInputElement) {
+        const nickname = this.nicknameInput.value.trim().slice(0, 16)
+        localStorage.setItem('nickname', nickname)
+        onNicknameChange(nickname)
+        networkManager.setNickname(nickname)
+      }
     })
 
     // menu and fullscreen
@@ -192,6 +209,8 @@ export default class UI {
 
   music = document.querySelector('#music')
   musicInput = document.querySelector('#music-input')
+
+  nicknameInput = document.querySelector('#nickname-input')
 
   settingBack = document.querySelector('#setting-back')
 

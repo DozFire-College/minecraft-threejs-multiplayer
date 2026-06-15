@@ -254,6 +254,21 @@ body {
   box-shadow: 0 0 0 2px black;
 }
 
+#nickname-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-family: Minecraft, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1rem;
+  color: white;
+  background-color: rgba(0, 0, 0, 0.25);
+  border-left: 2px solid #a4a4a4;
+  border-top: 2px solid #a4a4a4;
+  border-bottom: 2px solid #545655;
+  border-right: 2px solid #545655;
+  box-shadow: 0 0 0 2px black;
+  outline: none;
+}
+
 #distance-input::-webkit-slider-thumb:hover,
 #fov-input::-webkit-slider-thumb:hover,
 #music-input::-webkit-slider-thumb:hover {

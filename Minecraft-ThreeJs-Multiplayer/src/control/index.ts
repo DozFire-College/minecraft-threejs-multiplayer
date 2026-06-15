@@ -91,6 +91,10 @@ export default class Control {
   mouseHolding = false
   spaceHolding = false
   collisionEpsilon = 0.001
+  cameraMode: 'first' | 'third' = 'first'
+  private renderRestorePosition: THREE.Vector3 | null = null
+  private readonly thirdPersonDistance = 4
+  private readonly thirdPersonHeight = 0.75
 
   initRayCaster = () => {
     this.raycasterUp.ray.direction = new THREE.Vector3(0, 1, 0)
@@ -114,6 +118,16 @@ export default class Control {
     w: false,
     s: false
   }
+
+  private updateHorizontalVelocityFromKeys = () => {
+    const forward = (this.downKeys.w ? 1 : 0) + (this.downKeys.s ? -1 : 0)
+    const strafe = (this.downKeys.d ? 1 : 0) + (this.downKeys.a ? -1 : 0)
+    const length = Math.hypot(forward, strafe)
+    const scale = length > 1 ? 1 / length : 1
+
+    this.velocity.x = forward * this.player.speed * scale
+    this.velocity.z = strafe * this.player.speed * scale
+  }
   
   setMovementHandler = (e: KeyboardEvent) => {
     if (e.repeat) {
@@ -130,26 +144,27 @@ export default class Control {
         this.velocity.y = 0
         this.velocity.x = 0
         this.velocity.z = 0
+        this.downKeys = { a: false, d: false, w: false, s: false }
         break
       case 'w':
       case 'W':
         this.downKeys.w = true
-        this.velocity.x = this.player.speed
+        this.updateHorizontalVelocityFromKeys()
         break
       case 's':
       case 'S':
         this.downKeys.s = true
-        this.velocity.x = -this.player.speed
+        this.updateHorizontalVelocityFromKeys()
         break
       case 'a':
       case 'A':
         this.downKeys.a = true
-        this.velocity.z = -this.player.speed
+        this.updateHorizontalVelocityFromKeys()
         break
       case 'd':
       case 'D':
         this.downKeys.d = true
-        this.velocity.z = this.player.speed
+        this.updateHorizontalVelocityFromKeys()
         break
       case ' ':
         if (this.player.mode === Mode.sneaking && !this.isJumping) {
@@ -179,18 +194,7 @@ export default class Control {
         if (this.player.mode === Mode.walking) {
           if (!this.isJumping) {
             this.player.setMode(Mode.sneaking)
-            if (this.downKeys.w) {
-              this.velocity.x = this.player.speed
-            }
-            if (this.downKeys.s) {
-              this.velocity.x = -this.player.speed
-            }
-            if (this.downKeys.a) {
-              this.velocity.z = -this.player.speed
-            }
-            if (this.downKeys.d) {
-              this.velocity.z = this.player.speed
-            }
+            this.updateHorizontalVelocityFromKeys()
             this.camera.position.setY(this.camera.position.y - 0.2)
           }
         } else {
@@ -211,22 +215,22 @@ export default class Control {
       case 'w':
       case 'W':
         this.downKeys.w = false
-        this.velocity.x = 0
+        this.updateHorizontalVelocityFromKeys()
         break
       case 's':
       case 'S':
         this.downKeys.s = false
-        this.velocity.x = 0
+        this.updateHorizontalVelocityFromKeys()
         break
       case 'a':
       case 'A':
         this.downKeys.a = false
-        this.velocity.z = 0
+        this.updateHorizontalVelocityFromKeys()
         break
       case 'd':
       case 'D':
         this.downKeys.d = false
-        this.velocity.z = 0
+        this.updateHorizontalVelocityFromKeys()
         break
       case ' ':
         if (this.player.mode === Mode.sneaking && !this.isJumping) {
@@ -243,18 +247,7 @@ export default class Control {
         if (this.player.mode === Mode.sneaking) {
           if (!this.isJumping) {
             this.player.setMode(Mode.walking)
-            if (this.downKeys.w) {
-              this.velocity.x = this.player.speed
-            }
-            if (this.downKeys.s) {
-              this.velocity.x = -this.player.speed
-            }
-            if (this.downKeys.a) {
-              this.velocity.z = -this.player.speed
-            }
-            if (this.downKeys.d) {
-              this.velocity.z = this.player.speed
-            }
+            this.updateHorizontalVelocityFromKeys()
             this.camera.position.setY(this.camera.position.y + 0.2)
           }
         }
@@ -398,7 +391,18 @@ export default class Control {
     }
   }
 
+  private globalKeydownHandler = (e: KeyboardEvent) => {
+    if (e.key !== 'F5') {
+      return
+    }
+
+    e.preventDefault()
+    this.cameraMode = this.cameraMode === 'first' ? 'third' : 'first'
+  }
+
   initEventListeners = () => {
+    window.addEventListener('keydown', this.globalKeydownHandler)
+
     document.addEventListener('pointerlockchange', () => {
       if (document.pointerLockElement) {
         document.body.addEventListener('keydown', this.changeHoldingBlockHandler)
@@ -415,8 +419,87 @@ export default class Control {
         document.body.removeEventListener('mousedown', this.mousedownHandler)
         document.body.removeEventListener('mouseup', this.mouseupHandler)
         this.velocity = new THREE.Vector3(0, 0, 0)
+        this.downKeys = { a: false, d: false, w: false, s: false }
       }
     })
+  }
+
+  getViewMode = () => this.cameraMode
+
+  isMoving = () =>
+    Math.abs(this.velocity.x) > 0.001 ||
+    Math.abs(this.velocity.z) > 0.001 ||
+    (this.player.mode === Mode.flying && Math.abs(this.velocity.y) > 0.001)
+
+  getAvatarYaw = () => {
+    const moveDirection = this.getMovementVector(this.velocity.x, this.velocity.z, 1)
+    if (moveDirection.lengthSq() > 0.000001) {
+      moveDirection.normalize()
+      return Math.atan2(moveDirection.x, moveDirection.z)
+    }
+
+    const lookDirection = new THREE.Vector3()
+    this.camera.getWorldDirection(lookDirection)
+    lookDirection.y = 0
+
+    if (lookDirection.lengthSq() === 0) {
+      return Math.PI
+    }
+
+    lookDirection.normalize()
+    return Math.atan2(lookDirection.x, lookDirection.z)
+  }
+
+  prepareCameraForRender = () => {
+    if (this.cameraMode !== 'third') {
+      this.renderRestorePosition = null
+      return
+    }
+
+    this.renderRestorePosition = this.camera.position.clone()
+
+    const lookDirection = new THREE.Vector3()
+    this.camera.getWorldDirection(lookDirection)
+    if (lookDirection.lengthSq() === 0) {
+      lookDirection.set(0, 0, -1)
+    } else {
+      lookDirection.normalize()
+    }
+
+    const desiredOffset = lookDirection
+      .clone()
+      .multiplyScalar(-this.thirdPersonDistance)
+      .add(new THREE.Vector3(0, this.thirdPersonHeight, 0))
+
+    const desiredPosition = this.camera.position.clone().add(desiredOffset)
+
+    const raycaster = new THREE.Raycaster(
+      this.camera.position,
+      desiredOffset.clone().normalize(),
+      0.1,
+      desiredOffset.length()
+    )
+    const intersections = raycaster.intersectObjects(this.terrain.blocks, false)
+
+    if (intersections.length > 0) {
+      const safeDistance = Math.max(intersections[0].distance - 0.25, 0.75)
+      desiredPosition.copy(
+        this.camera.position
+          .clone()
+          .add(desiredOffset.clone().normalize().multiplyScalar(safeDistance))
+      )
+    }
+
+    this.camera.position.copy(desiredPosition)
+  }
+
+  restoreCameraAfterRender = () => {
+    if (!this.renderRestorePosition) {
+      return
+    }
+
+    this.camera.position.copy(this.renderRestorePosition)
+    this.renderRestorePosition = null
   }
 
   moveX(distance: number, delta: number) {

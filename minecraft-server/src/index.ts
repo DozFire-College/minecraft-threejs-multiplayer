@@ -17,8 +17,11 @@ const chunkCache = new Map<string, { blocks: Map<string, number>; hash: string }
 
 interface PlayerData {
     id: string;
+    nickname: string;
     position: { x: number; y: number; z: number };
     rotation: { yaw: number; pitch: number };
+    isMoving: boolean;
+    avatarYaw: number;
 }
 
 const clients = new Map<string, WebSocket>();
@@ -178,8 +181,11 @@ wss.on('connection', (ws: WebSocket) => {
     
     const playerData: PlayerData = {
         id: playerId,
+        nickname: playerId,
         position: { x: 0, y: 30, z: 0 },
-        rotation: { yaw: 0, pitch: 0 }
+        rotation: { yaw: 0, pitch: 0 },
+        isMoving: false,
+        avatarYaw: Math.PI
     };
     
     clients.set(playerId, ws);
@@ -191,14 +197,18 @@ wss.on('connection', (ws: WebSocket) => {
         .filter(player => player.id !== playerId)
         .map(player => ({
             id: player.id,
+            nickname: player.nickname,
             position: player.position,
-            rotation: player.rotation
+            rotation: player.rotation,
+            isMoving: player.isMoving,
+            avatarYaw: player.avatarYaw
         }));
 
     ws.send(JSON.stringify({
         type: 'welcome',
         data: {
             playerId: playerId,
+            nickname: playerData.nickname,
             worldSeed: WORLD_SEED,
             spawnPosition: { x: 0, y: 32, z: 0 },
             players: existingPlayers
@@ -209,7 +219,14 @@ wss.on('connection', (ws: WebSocket) => {
 
     broadcast({
         type: 'playerJoined',
-        data: { id: playerId, position: playerData.position, rotation: playerData.rotation }
+        data: {
+            id: playerId,
+            nickname: playerData.nickname,
+            position: playerData.position,
+            rotation: playerData.rotation,
+            isMoving: playerData.isMoving,
+            avatarYaw: playerData.avatarYaw
+        }
     }, playerId);
 
 
@@ -223,15 +240,36 @@ wss.on('connection', (ws: WebSocket) => {
                         const player = players.get(playerId)!;
                         player.position = message.data.position;
                         player.rotation = message.data.rotation;
+                        player.isMoving = Boolean(message.data.isMoving);
+                        player.avatarYaw = typeof message.data.avatarYaw === 'number'
+                            ? message.data.avatarYaw
+                            : player.avatarYaw;
                         
                         broadcast({
                             type: 'playerMoved',
                             data: {
                                 id: playerId,
                                 position: message.data.position,
-                                rotation: message.data.rotation
+                                rotation: message.data.rotation,
+                                isMoving: player.isMoving,
+                                avatarYaw: player.avatarYaw
                             }
                         }, playerId);
+                    }
+                    break;
+
+                case 'setNickname':
+                    if (players.has(playerId)) {
+                        const player = players.get(playerId)!;
+                        const rawNickname =
+                            typeof message.data?.nickname === 'string' ? message.data.nickname : '';
+                        const nickname = rawNickname.trim().slice(0, 16) || player.id;
+                        player.nickname = nickname;
+
+                        broadcast({
+                            type: 'playerNickname',
+                            data: { id: playerId, nickname }
+                        });
                     }
                     break;
                     
