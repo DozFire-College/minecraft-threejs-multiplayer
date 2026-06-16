@@ -8,11 +8,11 @@ const VIEW_DISTANCE = 1;
 const CHUNK_PART_SIZE = 5000;
 const wss = new WebSocketServer({ port: PORT });
 
-// Создаём генератор мира
+
 const worldGenerator = new ServerNoise();
 const WORLD_SEED = ServerNoise.getWorldSeed();
 
-// Кэш сгенерированных чанков (теперь с хешем для проверки)
+
 const chunkCache = new Map<string, { blocks: Map<string, number>; hash: string }>();
 
 interface PlayerData {
@@ -40,7 +40,6 @@ function computeChunkHash(blocks: Map<string, number>): string {
 
 
 function generateTree(blocks: Map<string, number>, x: number, z: number, groundHeight: number) {
-    // Ствол дерева (высота 10 блоков)
     for (let i = 1; i <= 10; i++) {
         const key = `${x}_${groundHeight + i}_${z}`;
         if (!blocks.has(key)) {
@@ -51,10 +50,8 @@ function generateTree(blocks: Map<string, number>, x: number, z: number, groundH
   
     const leafStartY = groundHeight + 10;
     
-    // Верхушка
     blocks.set(`${x}_${leafStartY + 2}_${z}`, 3);
     
-    // Слой 1
     for (let dx = -1; dx <= 1; dx++) {
         for (let dz = -1; dz <= 1; dz++) {
             if (dx === 0 && dz === 0) continue;
@@ -83,7 +80,6 @@ function generateTree(blocks: Map<string, number>, x: number, z: number, groundH
 function generateChunk(chunkX: number, chunkZ: number, chunkSize: number = CHUNK_SIZE): Map<string, number> {
     const chunkKey = `${chunkX}_${chunkZ}`;
     
-    // Проверяем кэш
     if (chunkCache.has(chunkKey)) {
         console.log(`📦 Чанк ${chunkKey} взят из кэша, хеш: ${chunkCache.get(chunkKey)!.hash}`);
         return new Map(chunkCache.get(chunkKey)!.blocks);
@@ -347,7 +343,6 @@ function broadcast(message: object, excludePlayerId?: string) {
 
 setInterval(() => {
     console.log(`📊 Статистика: игроков=${clients.size}, чанков в кэше=${chunkCache.size}`);
-    // Выводим список чанков в кэше для отладки
     if (chunkCache.size > 0 && chunkCache.size <= 10) {
         console.log(`📦 Чанки в кэше: ${Array.from(chunkCache.keys()).join(', ')}`);
     }
