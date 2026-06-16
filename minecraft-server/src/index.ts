@@ -1,18 +1,112 @@
 // minecraft-server/src/index.ts
+import { createServer, IncomingMessage, ServerResponse } from 'http';
+import { existsSync, readFileSync, statSync } from 'fs';
+import path from 'path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { ServerNoise } from './noise';
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
+const WS_PATH = '/ws';
 const CHUNK_SIZE = 24;
 const VIEW_DISTANCE = 1;
 const CHUNK_PART_SIZE = 5000;
-const wss = new WebSocketServer({ port: PORT });
+const CLIENT_DIST_DIR = path.resolve(__dirname, '../../Minecraft-ThreeJs-Multiplayer/dist');
 
+const MIME_TYPES: Record<string, string> = {
+    '.css': 'text/css; charset=utf-8',
+    '.fbx': 'application/octet-stream',
+    '.glb': 'model/gltf-binary',
+    '.html': 'text/html; charset=utf-8',
+    '.ico': 'image/x-icon',
+    '.jpeg': 'image/jpeg',
+    '.jpg': 'image/jpeg',
+    '.js': 'text/javascript; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.ogg': 'audio/ogg',
+    '.otf': 'font/otf',
+    '.png': 'image/png',
+    '.svg': 'image/svg+xml',
+    '.ttf': 'font/ttf',
+    '.wasm': 'application/wasm',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2'
+};
 
+function sendResponse(
+    res: ServerResponse,
+    statusCode: number,
+    body: string | Buffer,
+    contentType: string = 'text/plain; charset=utf-8'
+) {
+    res.writeHead(statusCode, { 'Content-Type': contentType });
+    res.end(body);
+}
+
+function getStaticFilePath(req: IncomingMessage): string | null {
+    const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    const pathname = decodeURIComponent(requestUrl.pathname);
+
+    if (pathname === WS_PATH) {
+        return null;
+    }
+
+    const requestedPath = pathname === '/'
+        ? path.join(CLIENT_DIST_DIR, 'index.html')
+        : path.resolve(CLIENT_DIST_DIR, `.${pathname}`);
+
+    if (!requestedPath.startsWith(CLIENT_DIST_DIR)) {
+        return null;
+    }
+
+    if (existsSync(requestedPath) && statSync(requestedPath).isFile()) {
+        return requestedPath;
+    }
+
+    const indexPath = path.join(CLIENT_DIST_DIR, 'index.html');
+    if (existsSync(indexPath)) {
+        return indexPath;
+    }
+
+    return null;
+}
+
+function serveClient(req: IncomingMessage, res: ServerResponse) {
+    if (!existsSync(CLIENT_DIST_DIR)) {
+        sendResponse(
+            res,
+            503,
+            'Client build not found. Run the client build before starting the server.'
+        );
+        return;
+    }
+
+    const filePath = getStaticFilePath(req);
+    if (!filePath) {
+        sendResponse(res, 404, 'Not found');
+        return;
+    }
+
+    try {
+        const ext = path.extname(filePath).toLowerCase();
+        const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+        const fileBuffer = readFileSync(filePath);
+        sendResponse(res, 200, fileBuffer, contentType);
+    } catch (error) {
+        console.error('Ошибка раздачи статики:', error);
+        sendResponse(res, 500, 'Internal server error');
+    }
+}
+
+const server = createServer((req, res) => {
+    serveClient(req, res);
+});
+const wss = new WebSocketServer({ server, path: WS_PATH });
+
+// Создаём генератор мира
 const worldGenerator = new ServerNoise();
 const WORLD_SEED = ServerNoise.getWorldSeed();
 
-
+// Кэш сгенерированных чанков (теперь с хешем для проверки)
 const chunkCache = new Map<string, { blocks: Map<string, number>; hash: string }>();
 
 interface PlayerData {
@@ -40,6 +134,7 @@ function computeChunkHash(blocks: Map<string, number>): string {
 
 
 function generateTree(blocks: Map<string, number>, x: number, z: number, groundHeight: number) {
+    // Ствол дерева (высота 10 блоков)
     for (let i = 1; i <= 10; i++) {
         const key = `${x}_${groundHeight + i}_${z}`;
         if (!blocks.has(key)) {
@@ -50,8 +145,10 @@ function generateTree(blocks: Map<string, number>, x: number, z: number, groundH
   
     const leafStartY = groundHeight + 10;
     
+    // Верхушка
     blocks.set(`${x}_${leafStartY + 2}_${z}`, 3);
     
+    // Слой 1
     for (let dx = -1; dx <= 1; dx++) {
         for (let dz = -1; dz <= 1; dz++) {
             if (dx === 0 && dz === 0) continue;
@@ -80,6 +177,7 @@ function generateTree(blocks: Map<string, number>, x: number, z: number, groundH
 function generateChunk(chunkX: number, chunkZ: number, chunkSize: number = CHUNK_SIZE): Map<string, number> {
     const chunkKey = `${chunkX}_${chunkZ}`;
     
+    // Проверяем кэш
     if (chunkCache.has(chunkKey)) {
         console.log(`📦 Чанк ${chunkKey} взят из кэша, хеш: ${chunkCache.get(chunkKey)!.hash}`);
         return new Map(chunkCache.get(chunkKey)!.blocks);
@@ -167,10 +265,14 @@ function sendChunkToPlayer(ws: WebSocket, chunkX: number, chunkZ: number) {
     }
 }
 
-console.log(`✅ WebSocket-сервер запущен на порту ${PORT}`);
-console.log(`🌍 Seed мира: ${WORLD_SEED}`);
-console.log(`📐 Размер чанка: ${CHUNK_SIZE} блока`);
-console.log(`👁️ Базовая дистанция отрисовки: ${VIEW_DISTANCE} чанк(а)`);
+server.listen(PORT, () => {
+    console.log(`✅ HTTP/WebSocket-сервер запущен на порту ${PORT}`);
+    console.log(`🌍 Seed мира: ${WORLD_SEED}`);
+    console.log(`📐 Размер чанка: ${CHUNK_SIZE} блока`);
+    console.log(`👁️ Базовая дистанция отрисовки: ${VIEW_DISTANCE} чанк(а)`);
+    console.log(`🖥️ Статика клиента: ${CLIENT_DIST_DIR}`);
+    console.log(`🔌 WebSocket endpoint: ${WS_PATH}`);
+});
 
 wss.on('connection', (ws: WebSocket) => {
     const playerId = `player_${nextPlayerId++}`;
@@ -343,6 +445,7 @@ function broadcast(message: object, excludePlayerId?: string) {
 
 setInterval(() => {
     console.log(`📊 Статистика: игроков=${clients.size}, чанков в кэше=${chunkCache.size}`);
+    // Выводим список чанков в кэше для отладки
     if (chunkCache.size > 0 && chunkCache.size <= 10) {
         console.log(`📦 Чанки в кэше: ${Array.from(chunkCache.keys()).join(', ')}`);
     }
@@ -353,4 +456,11 @@ process.on('SIGUSR2', () => {
     console.log('🗑️ Очистка кэша чанков...');
     chunkCache.clear();
     console.log(`✅ Кэш очищен, сейчас ${chunkCache.size} чанков`);
+});
+
+process.on('SIGTERM', () => {
+    console.log('🛑 Остановка сервера...');
+    wss.close(() => {
+        server.close(() => process.exit(0));
+    });
 });

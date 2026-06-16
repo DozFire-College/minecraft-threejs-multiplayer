@@ -10,9 +10,14 @@ import { NetworkManager } from './network/NetworkManager'
 import './style.css'
 
 // ========== SETTING SERVER ==========
-// change your IP in cmd 'ipconfig'
-// For example: 'ws://192.168.1.5:3000'
-const SERVER_URL = `ws://${window.location.hostname || 'localhost'}:3000`
+// In development клиент ходит на локальный сервер, а в production использует тот же хост.
+const SERVER_URL =
+    import.meta.env.VITE_SERVER_URL ||
+    (
+        import.meta.env.DEV
+            ? 'ws://localhost:3000/ws'
+            : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`
+    )
 
 const networkManager = new NetworkManager(SERVER_URL)
 let worldSeed = 12345

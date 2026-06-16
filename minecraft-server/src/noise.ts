@@ -26,7 +26,7 @@ export class ServerNoise {
     return ServerNoise.WORLD_SEED;
   }
 
- 
+  // Упрощённый get - для 2D используем y=0
   get2D(x: number, z: number): number {
     return this.noise.noise(x, 0, z);
   }

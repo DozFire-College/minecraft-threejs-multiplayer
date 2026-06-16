@@ -1,0 +1,14 @@
+{
+  "name": "minecraft-threejs-multiplayer-app",
+  "private": true,
+  "scripts": {
+    "install:client": "npm install --prefix Minecraft-ThreeJs-Multiplayer",
+    "install:server": "npm install --prefix minecraft-server",
+    "build:client": "npm run build --prefix Minecraft-ThreeJs-Multiplayer",
+    "build:server": "npm run build --prefix minecraft-server",
+    "dev:client": "npm run dev --prefix Minecraft-ThreeJs-Multiplayer",
+    "dev:server": "npm run dev --prefix minecraft-server",
+    "build": "npm run install:client && npm run install:server && npm run build:client && npm run build:server",
+    "start": "npm run start --prefix minecraft-server"
+  }
+}

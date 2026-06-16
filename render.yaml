@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: minecraft-threejs-multiplayer
+    env: node
+    buildCommand: npm run build
+    startCommand: npm start
