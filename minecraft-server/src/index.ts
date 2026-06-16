@@ -2,7 +2,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { ServerNoise } from './noise';
 
-const PORT = parseInt(process.env.PORT || '3000', 10);
+const PORT = 3000;
 const CHUNK_SIZE = 24;
 const VIEW_DISTANCE = 1;
 const CHUNK_PART_SIZE = 5000;
