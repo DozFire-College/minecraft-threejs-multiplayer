@@ -40,13 +40,15 @@ Recommend to use Chrome to get the best experience
   - 4.3 Update Terrain. Make the server push out block changes. -> ✅
 5. Add player models. -> ✅
 6. Add Nicknames. -> ✅
-7. Hosting this REPO -> ❌
+7. Hosting this REPO -> ✅
 ## Extras inssues
 
-1. Add water. -> ❌
-2. Add more blocks. -> ❌
-3. Add survival mod:
-   3.1 In player state add HP player. -> ❌
-   3.2 Add inventory. -> ❌
-   3.3 Add mobs. -> ❌
-4. Add create worlds and unicle seeds -> ❌
+1. Fix the loading chunks. -> ❌
+2. Fix player movement after re-login. -> ❌
+3. Add water. -> ❌
+4. Add more blocks. -> ❌
+5. Add survival mod:
+   5.1 In player state add HP player. -> ❌
+   5.2 Add inventory. -> ❌
+   5.3 Add mobs. -> ❌
+6. Add create worlds and unicle seeds -> ❌
