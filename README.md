@@ -1,7 +1,6 @@
-# For run in LocalHost
-- bash: cd minecraft-server && npm start
-- bash: cd minecraft-threejs-multiplayer && npm run dev -- --host 0.0.0.0
-- In main.ts write your ip: const SERVER_URL = 'ws://YOUR_IP:3000'
+# Let's play! 😁
+
+https://minecraft-multiplayer-dozfire.onrender.com
 
 
 # minecraft-threejs
