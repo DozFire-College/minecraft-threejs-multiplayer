@@ -41,7 +41,7 @@ Recommend to use Chrome to get the best experience
 5. Add player models. -> ✅
 6. Add Nicknames. -> ✅
 7. Hosting this REPO -> ✅
-## Extras inssues
+## Extras issues
 
 1. Fix the loading chunks. -> ❌
 2. Fix player movement after re-login. -> ❌
