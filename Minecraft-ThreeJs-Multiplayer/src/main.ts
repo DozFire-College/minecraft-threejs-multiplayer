@@ -12,7 +12,7 @@ import './style.css'
 // ========== SETTING SERVER ==========
 // change your IP in cmd 'ipconfig'
 // For example: 'ws://192.168.1.5:3000'
-const SERVER_URL = `wss://minecraft-multiplayer-dozfire.onrender.com`
+const SERVER_URL = `ws://${window.location.hostname || 'localhost'}:3000`
 
 const networkManager = new NetworkManager(SERVER_URL)
 let worldSeed = 12345
