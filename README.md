@@ -1,7 +1,8 @@
 # CHECK MULTIPLAYER BRANCH
 If you want check multiplayer - change multiplayer branch and download
 
-Do you read documentation? [Click Me](https://github.com/DozFire-College/minecraft-threejs-multiplayer/wiki)
+## Do you read documentation? 
+[Click Me](https://github.com/DozFire-College/minecraft-threejs-multiplayer/wiki)
 
 # minecraft-threejs
 
