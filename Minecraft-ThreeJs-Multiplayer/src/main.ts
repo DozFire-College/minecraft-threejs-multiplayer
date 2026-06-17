@@ -10,7 +10,7 @@ import { NetworkManager } from './network/NetworkManager'
 import './style.css'
 
 // ========== SETTING SERVER ==========
-// In development клиент ходит на локальный сервер, а в production использует тот же хост.
+
 const SERVER_URL =
     import.meta.env.VITE_SERVER_URL ||
     (
