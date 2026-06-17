@@ -47,7 +47,7 @@ Recommend to use Chrome to get the best experience
 ## Extras issues
 
 1. Fix the loading chunks. -> ❌
-2. Fix player movement after re-login or open pause menu. -> ❌
+2. Fix player movement on RU keyboard-> ❌
 3. Add water. -> ❌
 4. Add more blocks. -> ❌
 5. Add survival mod:
